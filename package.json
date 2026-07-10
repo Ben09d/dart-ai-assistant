@@ -1,0 +1,163 @@
+{
+  "name": "dart-ai-assistant",
+  "displayName": "Dart AI Assistant Pro",
+  "description": "Advanced AI-powered Dart assistant with auto-correction, learning ability, security analysis, and intelligent code suggestions",
+  "version": "1.0.3",
+  "publisher": "dart-ai-team",
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters",
+    "Snippets",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "dart",
+    "flutter",
+    "ai",
+    "autocomplete",
+    "intellisense",
+    "security",
+    "formatting"
+  ],
+  "activationEvents": [
+    "onLanguage:dart"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "dartAI.fixErrors",
+        "title": "Dart AI: Fix All Errors"
+      },
+      {
+        "command": "dartAI.optimizeCode",
+        "title": "Dart AI: Optimize Code"
+      },
+      {
+        "command": "dartAI.securityScan",
+        "title": "Dart AI: Security Scan"
+      },
+      {
+        "command": "dartAI.explainCode",
+        "title": "Dart AI: Explain Code"
+      },
+      {
+        "command": "dartAI.generateTests",
+        "title": "Dart AI: Generate Tests"
+      },
+      {
+        "command": "dartAI.refactor",
+        "title": "Dart AI: Intelligent Refactor"
+      },
+      {
+        "command": "dartAI.completeCode",
+        "title": "Dart AI: Complete Code Block"
+      },
+      {
+        "command": "dartAI.viewLearningDashboard",
+        "title": "Dart AI: View Learning Dashboard"
+      },
+      {
+        "command": "dartAI.viewAdvancedStats",
+        "title": "Dart AI: View Advanced Stats"
+      },
+      {
+        "command": "dartAI.showPredictions",
+        "title": "Dart AI: Show Next Line Predictions"
+      },
+      {
+        "command": "dartAI.showPredictionStats",
+        "title": "Dart AI: Show Prediction Statistics"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "dartAI.fixErrors",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "editorTextFocus && editorLangId == dart"
+      },
+      {
+        "command": "dartAI.completeCode",
+        "key": "ctrl+space",
+        "mac": "cmd+space",
+        "when": "editorTextFocus && editorLangId == dart"
+      }
+    ],
+    "configuration": {
+      "title": "Dart AI Assistant",
+      "properties": {
+        "dartAI.enableAutoCorrect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic error correction"
+        },
+        "dartAI.enableLearning": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable learning from your coding patterns"
+        },
+        "dartAI.securityLevel": {
+          "type": "string",
+          "enum": [
+            "basic",
+            "standard",
+            "strict"
+          ],
+          "default": "standard",
+          "description": "Security scanning level"
+        },
+        "dartAI.autoFormat": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically format code on save"
+        },
+        "dartAI.suggestionDelay": {
+          "type": "number",
+          "default": 300,
+          "description": "Delay in ms before showing suggestions"
+        },
+        "dartAI.anthropicApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API key for AI features (optional - uses built-in models if not provided)"
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "dart",
+        "extensions": [
+          ".dart"
+        ],
+        "aliases": [
+          "Dart"
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/vscode": "^1.125.0",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.3",
+    "vscode": "^1.1.34"
+  },
+  "dependencies": {
+    "axios": "^1.6.2"
+  }
+}
