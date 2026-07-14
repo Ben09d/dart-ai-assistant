@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DartAnalyzer, DartError } from '../services/dartAnalyzer';
 // import type { QuickFixSuggestion } from '../services/dartAnalyzer';
+import type { QuickFixSuggestion } from '../services/dartAnalyzer';
 
 export class DiagnosticProvider {
     private analyzer: DartAnalyzer;
@@ -56,7 +57,7 @@ export class DiagnosticProvider {
         }
     }
 
-    
+
     // ── Additive: richer diagnostic construction matching the new DartAnalyzer ──
 
     /**
@@ -82,15 +83,17 @@ export class DiagnosticProvider {
         const errors = await this.analyzer.analyzeDocument(document);
         const map = new Map<string, vscode.Diagnostic>();
         for (const error of errors) {
-            map.set(error.id, this.createRichDiagnostic(error, document));
+            const stableId = (error as { id?: string }).id
+                ?? `${error.code ?? 'unknown'}@${error.line}:${error.column}`;
+            map.set(stableId, this.createRichDiagnostic(error, document));
         }
         return map;
     }
 
     private createRichDiagnostic(error: DartError, document: vscode.TextDocument): vscode.Diagnostic {
         const line = document.lineAt(error.line);
-        const endLine = error.endLine ?? error.line;
-        const endColumn = error.endColumn ?? line.text.length;
+        const endLine = (error as { endLine?: number }).endLine ?? error.line;
+        const endColumn = (error as { endColumn?: number }).endColumn ?? line.text.length;
 
         // Guard against an end position that's before the start position —
         // can happen if endLine/endColumn weren't populated by the analyzer
@@ -111,13 +114,14 @@ export class DiagnosticProvider {
         const severity = this.getRichSeverity(error.severity);
         const diagnostic = new vscode.Diagnostic(range, error.message, severity);
 
-        diagnostic.source = error.source ?? 'Dart AI Assistant';
+        diagnostic.source = (error as { source?: string }).source ?? 'Dart AI Assistant';
 
         // Documentation URL becomes a clickable code in the Problems panel
         // when present; otherwise fall back to a plain string code so the
         // original behaviour (diagnostic.code = error.code) is preserved.
-        diagnostic.code = error.documentationUrl
-            ? { value: error.code || 'dart_ai', target: vscode.Uri.parse(error.documentationUrl) }
+        const documentationUrl = (error as { documentationUrl?: string }).documentationUrl;
+        diagnostic.code = documentationUrl
+            ? { value: error.code || 'dart_ai', target: vscode.Uri.parse(documentationUrl) }
             : error.code;
 
         // Structured quick fix as relatedInformation, now using the typed
@@ -160,7 +164,10 @@ export class DiagnosticProvider {
     }
 
     /** Lint codes that represent dead/unnecessary code, eligible for fade-out styling. */
-    private isUnnecessaryCode(code: string): boolean {
+    private isUnnecessaryCode(code?: string): boolean {
+        if (!code) {
+            return false;
+        }
         const unnecessaryCodes = new Set([
             'unused_import',
             'unused_local_variable',
@@ -173,7 +180,10 @@ export class DiagnosticProvider {
     }
 
     /** Lint codes that represent deprecated API usage, eligible for strike-through styling. */
-    private isDeprecatedCode(code: string): boolean {
+    private isDeprecatedCode(code?: string): boolean {
+        if (!code) {
+            return false;
+        }
         const deprecatedCodes = new Set([
             'deprecated_member_use',
             'deprecated_member_use_from_same_package',

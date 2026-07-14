@@ -2,8 +2,12 @@
   "name": "dart-ai-assistant",
   "displayName": "Dart AI Assistant Pro",
   "description": "Advanced AI-powered Dart assistant with auto-correction, learning ability, security analysis, and intelligent code suggestions",
-  "version": "1.0.3",
-  "publisher": "dart-ai-team",
+  "version": "1.0.4",
+  "publisher": "a-i-0-studio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/a-i-0-studio/dart-ai-assistant"
+  },
   "engines": {
     "vscode": "^1.125.0"
   },
@@ -72,15 +76,13 @@
       {
         "command": "dartAI.showPredictionStats",
         "title": "Dart AI: Show Prediction Statistics"
+      },
+      {
+        "command": "dartAI.showPreventionStats",
+        "title": "Dart AI: Show Prevention Stats"
       }
     ],
     "keybindings": [
-      {
-        "command": "dartAI.fixErrors",
-        "key": "ctrl+shift+f",
-        "mac": "cmd+shift+f",
-        "when": "editorTextFocus && editorLangId == dart"
-      },
       {
         "command": "dartAI.completeCode",
         "key": "ctrl+space",
@@ -118,7 +120,7 @@
         },
         "dartAI.suggestionDelay": {
           "type": "number",
-          "default": 300,
+          "default": 3000,
           "description": "Delay in ms before showing suggestions"
         },
         "dartAI.anthropicApiKey": {
@@ -152,10 +154,9 @@
     "@types/node": "^20.19.43",
     "@types/vscode": "^1.125.0",
     "@typescript-eslint/eslint-plugin": "^8.63.0",
-    "@typescript-eslint/parser": "^6.15.0",
+    "@typescript-eslint/parser": "^8.63.0",
     "eslint": "^8.56.0",
-    "typescript": "^5.3.3",
-    "vscode": "^1.1.34"
+    "typescript": "^5.3.3"
   },
   "dependencies": {
     "axios": "^1.6.2"

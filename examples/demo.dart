@@ -1,11 +1,10 @@
-// Example Dart file demonstrating Dart AI Assistant Pro features
-
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
+// Example Dart file demonstrating Dart AI Assistant Pro features
+
 /// This file demonstrates various features of Dart AI Assistant Pro
-/// 
+///
 /// Features demonstrated:
 /// - Auto-correction
 /// - Code completion
@@ -20,21 +19,21 @@ import 'dart:io';
 
 // Example 1: Missing semicolon (auto-fixed with Ctrl+Shift+F)
 void demonstrateMissingSemicolon() {
-  String message = "Hello World";
+  String message      =      "Hello World";
   print(message);
 }
 
 // Example 2: Undefined variable detection
 void demonstrateUndefinedVariable() {
   // The extension will warn about undefined variables
-  var name = "John";
+  var name      =      "John";
   print(name);
 }
 
 // Example 3: Type mismatch detection
 void demonstrateTypeMismatch() {
-  int number = 42;
-  String text = "42";
+  int number      =      42;
+  String text      =      "42";
   // Extension warns if you try: int x = text;
   print('Number: $number, Text: $text');
 }
@@ -46,41 +45,41 @@ void demonstrateTypeMismatch() {
 class SecurityExamples {
   // ⚠️ Security Scanner will flag this
   // ISSUE: Hardcoded API key
-  final String apiKey = "sk-1234567890abcdefghijklmnop";
-  
+  final String apiKey      =      "sk-1234567890abcdefghijklmnop";
+
   // ✅ Better approach (suggested by scanner)
   String getApiKey() {
     return Platform.environment['API_KEY'] ?? '';
   }
-  
+
   // ⚠️ Security Scanner will flag this
   // ISSUE: SQL Injection vulnerability
   Future<List<User>> getUsersUnsafe(String username) async {
-    final query = "SELECT * FROM users WHERE name = '$username'";
+    final query      =      "SELECT * FROM users WHERE name = '$username'";
     // Execute query...
     print(query);
     return [];
   }
-  
+
   // ✅ Better approach (suggested by scanner)
   Future<List<User>> getUsersSafe(String username) async {
-    final query = "SELECT * FROM users WHERE name = ?";
+    final query      =      "SELECT * FROM users WHERE name = ?";
     // Use parameterized query...
     print(query);
     return [];
   }
-  
+
   // ⚠️ Security Scanner will flag this
   // ISSUE: Insecure HTTP
   Future<void> fetchDataInsecure() async {
-    final url = 'http://api.example.com/data';
+    final url      =      'http://api.example.com/data';
     print('Fetching from: $url');
     // Fetch data...
   }
-  
+
   // ✅ Better approach
   Future<void> fetchDataSecure() async {
-    final url = 'https://api.example.com/data';
+    final url      =      'https://api.example.com/data';
     print('Fetching from: $url');
     // Fetch data...
   }
@@ -98,7 +97,7 @@ Future<String> asyncExample() async {
 
 // Type "Stream" for stream completion
 Stream<int> streamExample() async* {
-  for (int i = 0; i < 10; i++) {
+  for (int i      =      0; i < 10; i++) {
     yield i;
     await Future.delayed(Duration(milliseconds: 100));
   }
@@ -134,7 +133,7 @@ class MyStatefulWidget extends StatefulWidget {
 }
 
 class _MyStatefulWidgetState extends State<MyStatefulWidget> {
-  int _counter = 0;
+  int _counter      =      0;
 
   @override
   Widget build(BuildContext context) {
@@ -162,16 +161,16 @@ class _MyStatefulWidgetState extends State<MyStatefulWidget> {
 // Select this code and run "Dart AI: Intelligent Refactor"
 class RefactoringExample {
   // This can be refactored to use getter/setter
-  String _name = '';
-  
+  String _name      =      '';
+
   void setName(String name) {
-    _name = name;
+    _name      =      name;
   }
-  
+
   String getName() {
     return _name;
   }
-  
+
   // AI will suggest:
   // String get name => _name;
   // set name(String value) => _name = value;
@@ -179,12 +178,12 @@ class RefactoringExample {
 
 // Complex loop that can be optimized
 List<int> doubleNumbers(List<int> numbers) {
-  List<int> result = [];
-  for (int i = 0; i < numbers.length; i++) {
+  List<int> result      =      [];
+  for (int i      =      0; i < numbers.length; i++) {
     result.add(numbers[i] * 2);
   }
   return result;
-  
+
   // AI suggests: return numbers.map((n) => n * 2).toList();
 }
 
@@ -194,12 +193,12 @@ List<int> doubleNumbers(List<int> numbers) {
 
 class NullSafetyExample {
   String? nullableName;
-  String nonNullableName = "John";
-  
+  String nonNullableName      =      "John";
+
   void printName() {
     // Extension suggests null-aware operator
     print(nullableName?.toUpperCase() ?? 'No name');
-    
+
     // Or null check
     if (nullableName != null) {
       print(nullableName!.toUpperCase());
@@ -214,18 +213,18 @@ class NullSafetyExample {
 class AsyncPatterns {
   // Parallel execution
   Future<void> parallelExample() async {
-    final results = await Future.wait([
+    final results      =      await Future.wait([
       fetchUser(),
       fetchPosts(),
       fetchComments(),
     ]);
     print('Fetched ${results.length} results');
   }
-  
+
   // Error handling
   Future<void> errorHandlingExample() async {
     try {
-      final data = await fetchData();
+      final data      =      await fetchData();
       processData(data);
     } catch (e) {
       print('Error: $e');
@@ -233,11 +232,11 @@ class AsyncPatterns {
       cleanup();
     }
   }
-  
+
   // Timeout handling
   Future<void> timeoutExample() async {
     try {
-      final result = await fetchData()
+      final result      =      await fetchData()
           .timeout(Duration(seconds: 5));
       print('Result: $result');
     } on TimeoutException {
@@ -253,7 +252,7 @@ class AsyncPatterns {
 class OptimizationExamples {
   // Before optimization (select and run "Dart AI: Optimize Code")
   List<String> getActiveUserNames(List<User> users) {
-    List<String> result = [];
+    List<String> result      =      [];
     for (var user in users) {
       if (user.isActive) {
         result.add(user.name);
@@ -261,7 +260,7 @@ class OptimizationExamples {
     }
     return result;
   }
-  
+
   // After optimization (AI suggestion)
   List<String> getActiveUserNamesOptimized(List<User> users) {
     return users
@@ -269,16 +268,16 @@ class OptimizationExamples {
         .map((user) => user.name)
         .toList();
   }
-  
+
   // Inefficient string concatenation
   String buildMessage(List<String> parts) {
-    String message = '';
+    String message      =      '';
     for (var part in parts) {
-      message += part + ' ';
+      message +    =     part + ' ';
     }
     return message;
   }
-  
+
   // Optimized version (AI suggestion)
   String buildMessageOptimized(List<String> parts) {
     return parts.join(' ');
@@ -292,11 +291,11 @@ class OptimizationExamples {
 // Select this class and run "Dart AI: Generate Tests"
 class Calculator {
   int add(int a, int b) => a + b;
-  
+
   int subtract(int a, int b) => a - b;
-  
+
   int multiply(int a, int b) => a * b;
-  
+
   double divide(int a, int b) {
     if (b == 0) throw ArgumentError('Cannot divide by zero');
     return a / b;
@@ -317,10 +316,10 @@ class Calculator {
 
 // If you consistently use camelCase:
 class MyServiceClass {
-  String userName = '';
-  int userAge = 0;
-  bool isActive = true;
-  
+  String userName      =      '';
+  int userAge      =      0;
+  bool isActive      =      true;
+
   void printInfo() {
     print('User: $userName, Age: $userAge, Active: $isActive');
   }
@@ -331,9 +330,9 @@ class User {
   final String name;
   final int age;
   final bool isActive;
-  
+
   User(this.name, this.age, this.isActive);
-  
+
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
       json['name'] as String,
@@ -341,7 +340,7 @@ class User {
       json['isActive'] as bool? ?? false,
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'name': name,
@@ -393,29 +392,29 @@ void cleanup() {
 class CollectionExamples {
   // Map operations
   void demonstrateMap() {
-    final numbers = [1, 2, 3, 4, 5];
-    final doubled = numbers.map((n) => n * 2).toList();
+    final numbers      =      [1, 2, 3, 4, 5];
+    final doubled      =      numbers.map((n) => n * 2).toList();
     print('Doubled: $doubled');
   }
-  
+
   // Filter operations
   void demonstrateFilter() {
-    final numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    final evens = numbers.where((n) => n % 2 == 0).toList();
+    final numbers      =      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    final evens      =      numbers.where((n) => n % 2 == 0).toList();
     print('Even numbers: $evens');
   }
-  
+
   // Reduce operations
   void demonstrateReduce() {
-    final numbers = [1, 2, 3, 4, 5];
-    final sum = numbers.reduce((a, b) => a + b);
+    final numbers      =      [1, 2, 3, 4, 5];
+    final sum      =      numbers.reduce((a, b) => a + b);
     print('Sum: $sum');
   }
-  
+
   // Combining operations
   void demonstrateCombined() {
-    final numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    final result = numbers
+    final numbers      =      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    final result      =      numbers
         .where((n) => n % 2 == 0)
         .map((n) => n * 2)
         .toList();
@@ -441,7 +440,7 @@ class ErrorHandlingExamples {
       print('Unknown error: $e');
     }
   }
-  
+
   // Try-catch-finally
   void handleWithFinally() {
     try {
@@ -453,7 +452,7 @@ class ErrorHandlingExamples {
       print('Cleanup performed');
     }
   }
-  
+
   // Rethrowing exceptions
   Future<void> rethrowExample() async {
     try {
@@ -474,7 +473,7 @@ void main() async {
   print('Dart AI Assistant Pro - Feature Demonstration');
   print('='.padRight(60, '='));
   print('');
-  
+
   print('Try the following:');
   print('1. Press Ctrl+Shift+F to fix errors');
   print('2. Press Ctrl+Space for completions');
@@ -482,42 +481,42 @@ void main() async {
   print('4. Select code and run "Dart AI: Optimize Code"');
   print('5. Run "Dart AI: Generate Tests" on Calculator class');
   print('');
-  
+
   // Demo some features
   print('Running some examples...');
   print('');
-  
+
   // Async example
   print('Testing async function...');
-  final result = await asyncExample();
+  final result      =      await asyncExample();
   print('Result: $result');
   print('');
-  
+
   // Stream example
   print('Testing stream...');
   await for (final value in streamExample().take(3)) {
     print('Stream value: $value');
   }
   print('');
-  
+
   // Calculator example
   print('Testing Calculator...');
-  final calc = Calculator();
+  final calc      =      Calculator();
   print('5 + 3 = ${calc.add(5, 3)}');
   print('5 - 3 = ${calc.subtract(5, 3)}');
   print('5 * 3 = ${calc.multiply(5, 3)}');
   print('6 / 2 = ${calc.divide(6, 2)}');
   print('');
-  
+
   // Collection examples
   print('Testing collection operations...');
-  final collections = CollectionExamples();
+  final collections      =      CollectionExamples();
   collections.demonstrateMap();
   collections.demonstrateFilter();
   collections.demonstrateReduce();
   collections.demonstrateCombined();
   print('');
-  
+
   print('Demo completed! 🎉');
   print('Now try using the extension features on this file.');
 }

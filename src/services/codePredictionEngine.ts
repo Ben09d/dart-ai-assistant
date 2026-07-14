@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
 
 declare const console: {
     warn(message?: any, ...optionalParams: any[]): void;

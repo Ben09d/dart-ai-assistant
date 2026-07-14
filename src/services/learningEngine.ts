@@ -3,12 +3,14 @@ import * as vscode from 'vscode';
 declare const console: {
     warn(message?: any, ...optionalParams: any[]): void;
 };
-
+const DECAY_HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 interface CodingPattern {
     pattern: string;
     frequency: number;
     context: string;
     lastUsed: Date;
+    /** Tags derived from analysis (e.g. "async", "widget", "state") */
+    tags: Set<string>;
 }
 
 interface UserPreference {
@@ -17,11 +19,50 @@ interface UserPreference {
     imports: string[];
 }
 
+interface AnomalyScore {
+    pattern: string;
+    score: number;
+    isAnomaly: boolean;
+    reason: string;
+}
+
+interface PatternMetrics {
+    totalPatterns: number;
+    avgFrequency: number;
+    medianFrequency: number;
+    patterns: Map<string, CodingPattern>;
+    anomalies: AnomalyScore[];
+}
+
+interface FixRecord {
+    error: string;
+    fix: string;
+    timestamp: number;
+    errorType: string;
+    /** Normalised embedding vector (bag-of-tokens) for fast similarity lookup */
+    vector: number[];
+}
+
+function decayedScore(frequency: number, lastUsed: Date): number {
+    const ageMs = Date.now() - lastUsed.getTime();
+    const lambda = Math.LN2 / DECAY_HALF_LIFE_MS;
+    return frequency * Math.exp(-lambda * ageMs);
+}
+
+function tokenize(text: string): string[] {
+    return text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s_]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean);
+}
+
+
 export class LearningEngine {
     private context: vscode.ExtensionContext;
     private patterns: Map<string, CodingPattern>;
     private preferences: UserPreference;
-    private fixHistory: Array<{ error: string; fix: string }>;
+    private fixHistory: FixRecord[];
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -39,7 +80,7 @@ export class LearningEngine {
         try {
             const savedPatterns = this.context.globalState.get<any>('codingPatterns');
             const savedPreferences = this.context.globalState.get<UserPreference>('userPreferences');
-            const savedHistory = this.context.globalState.get<any[]>('fixHistory');
+            const savedHistory = this.context.globalState.get<FixRecord[]>('fixHistory');
 
             if (savedPatterns && typeof savedPatterns === 'object') {
                 try {
@@ -73,6 +114,93 @@ export class LearningEngine {
             // Don't throw - just log and continue
         }
     }
+
+
+    /**
+     * Predict likely errors based on recent patterns and error history.
+     * Returns list of (error_type, probability) pairs.
+     */
+    predictLikelyErrors(recentCode: string): Array<{ errorType: string; probability: number }> {
+        const errorCounts: Record<string, number> = {};
+        const totalErrors = this.fixHistory.length || 1;
+
+        for (const fix of this.fixHistory) {
+            errorCounts[fix.errorType] = (errorCounts[fix.errorType] ?? 0) + 1;
+        }
+
+        // Check which error types are related to patterns in recent code
+        const relatedErrors: Record<string, number> = {};
+        const codeTokens = tokenize(recentCode);
+
+        for (const fix of this.fixHistory) {
+            const fixTokens = tokenize(fix.error + ' ' + fix.fix);
+            const overlap = codeTokens.filter(t => fixTokens.includes(t)).length;
+
+            if (overlap > 0) {
+                relatedErrors[fix.errorType] = (relatedErrors[fix.errorType] ?? 0) + overlap;
+            }
+        }
+
+        // Combine base probabilities with code-specific signals
+        const predictions: Array<{ errorType: string; probability: number }> = [];
+        for (const [errorType, relatedCount] of Object.entries(relatedErrors)) {
+            const baseProb = (errorCounts[errorType] ?? 0) / totalErrors;
+            const relatedProb = relatedCount / totalErrors;
+            const combined = (baseProb * 0.6 + relatedProb * 0.4);
+            predictions.push({ errorType, probability: combined });
+        }
+
+        return predictions.sort((a, b) => b.probability - a.probability).slice(0, 5);
+    }
+
+
+    /**
+     * Compute quality metrics for all patterns.
+     * Helps identify which patterns are most valuable for learning.
+     */
+    getPatternMetrics(): PatternMetrics {
+        const patterns = Array.from(this.patterns.values());
+        const frequencies = patterns.map(p => p.frequency);
+
+        const sorted = [...frequencies].sort((a, b) => a - b);
+        const median = sorted.length % 2 === 0
+            ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+            : sorted[Math.floor(sorted.length / 2)];
+
+        return {
+            totalPatterns: patterns.length,
+            avgFrequency: frequencies.length > 0 ? frequencies.reduce((a, b) => a + b, 0) / frequencies.length : 0,
+            medianFrequency: median,
+            patterns: this.patterns,
+            anomalies: this.detectAnomalies()
+        };
+    }
+
+
+
+    /**
+     * Predict the most likely next pattern given the current line context.
+     * Uses a simple bigram model built from co-occurring pattern types.
+     */
+    predictNextPattern(currentLine: string): string[] {
+        const matchingTags = new Set<string>();
+
+        for (const [, p] of this.patterns) {
+            if (currentLine.includes(p.pattern.split(':')[1] ?? '')) {
+                for (const t of p.tags) matchingTags.add(t);
+            }
+        }
+
+        const candidates = Array.from(this.patterns.values())
+            .filter(p => Array.from(p.tags).some(t => matchingTags.has(t)))
+            .map(p => ({ pattern: p.pattern, score: decayedScore(p.frequency, p.lastUsed) }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5)
+            .map(x => x.pattern);
+
+        return candidates;
+    }
+
 
     recordEdit(event: vscode.TextDocumentChangeEvent) {
         try {
@@ -135,7 +263,10 @@ export class LearningEngine {
                 try {
                     this.fixHistory.push({
                         error: errors[i].message || 'unknown',
-                        fix: fixes[i].newText || 'unknown'
+                        fix: fixes[i].newText || 'unknown',
+                        timestamp: Date.now(),
+                        errorType: errors[i].code || 'unknown',
+                        vector: tokenize(errors[i].message || 'unknown').map((_, i) => i)
                     });
                 } catch (error) {
                     console.warn('Error recording single fix:', error);
@@ -268,7 +399,8 @@ export class LearningEngine {
                 pattern,
                 frequency: 1,
                 context,
-                lastUsed: new Date()
+                lastUsed: new Date(),
+                tags: new Set,
             });
         }
     }
@@ -361,5 +493,49 @@ export class LearningEngine {
         }
 
         return most;
+    }
+
+      /**
+     * Detect anomalous patterns that deviate from user's coding norms.
+     * Uses statistical methods (z-score, isolation) to flag suspicious patterns.
+     */
+    detectAnomalies(): AnomalyScore[] {
+        const allPatterns = Array.from(this.patterns.values());
+        if (allPatterns.length < 5) return [];
+
+        const frequencies = allPatterns.map(p => p.frequency);
+        const mean = frequencies.reduce((a, b) => a + b, 0) / frequencies.length;
+        const variance = frequencies.reduce((a, b) => a + (b - mean) ** 2, 0) / frequencies.length;
+        const stdDev = Math.sqrt(variance);
+
+        const anomalies: AnomalyScore[] = [];
+
+        for (const pattern of allPatterns) {
+            // Z-score detection
+            const zScore = (pattern.frequency - mean) / (stdDev + 1);
+
+            // Recency anomaly: pattern used recently but low frequency
+            const daysOld = (Date.now() - pattern.lastUsed.getTime()) / 86_400_000;
+            const isRecent = daysOld < 1;
+            const isRare = pattern.frequency < mean * 0.3;
+
+            if (Math.abs(zScore) > 2) {
+                anomalies.push({
+                    pattern: pattern.pattern,
+                    score: Math.abs(zScore),
+                    isAnomaly: true,
+                    reason: zScore > 2 ? 'unusually_frequent' : 'unusually_rare'
+                });
+            } else if (isRecent && isRare) {
+                anomalies.push({
+                    pattern: pattern.pattern,
+                    score: 1.5,
+                    isAnomaly: true,
+                    reason: 'recent_but_rare'
+                });
+            }
+        }
+
+        return anomalies.sort((a, b) => b.score - a.score).slice(0, 10);
     }
 }

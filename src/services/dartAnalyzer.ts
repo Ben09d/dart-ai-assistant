@@ -1,18 +1,92 @@
 import * as vscode from 'vscode';
+import * as cp from 'child_process';
+import * as path from 'path';
+
+export type DiagnosticSeverity = 'error' | 'warning' | 'info' | 'hint';
 
 export interface DartError {
+    id: string;
     line: number;
     column: number;
+    endLine?: number;
+    endColumn?: number;
     message: string;
-    severity: 'error' | 'warning' | 'info';
+    severity: DiagnosticSeverity;
     code?: string;
+    source: string;
     quickFix?: QuickFixSuggestion;
+    documentationUrl?: string
 }
+
 
 export interface QuickFixSuggestion {
     title: string;
     kind: 'replace' | 'insert' | 'remove' | 'rename' | 'command';
     detail?: string;
+}
+
+export interface AnalysisResult {
+    uri: string;
+    errors: DartError[];
+    analyzedAt: number;             // Date.now()
+    durationMs: number;
+    fromCache: boolean;
+}
+
+export interface AnalyzerOptions {
+    /** Milliseconds to debounce repeated requests for the same file. Default: 600 */
+    debounceMs?: number;
+    /** Max age of a cached result before it is considered stale. Default: 8000 */
+    cacheMaxAgeMs?: number;
+    /** Whether to analyse dirty (unsaved) buffers using a temp file. Default: false */
+    analyseDirtyBuffers?: boolean;
+    /** Extra flags forwarded to `dart analyze`. */
+    extraFlags?: string[];
+}
+
+class Debouncer {
+    private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+    schedule(key: string, fn: () => void, delayMs: number): void {
+        const existing = this.timers.get(key);
+        if (existing) clearTimeout(existing);
+        this.timers.set(key, setTimeout(() => { this.timers.delete(key); fn(); }, delayMs));
+    }
+
+    cancel(key: string): void {
+        const t = this.timers.get(key);
+        if (t) { clearTimeout(t); this.timers.delete(key); }
+    }
+
+    cancelAll(): void {
+        for (const t of this.timers.values()) clearTimeout(t);
+        this.timers.clear();
+    }
+}
+
+// ─── Result cache ─────────────────────────────────────────────────────────────
+
+interface CacheEntry {
+    result: AnalysisResult;
+    expiresAt: number;
+}
+
+class ResultCache {
+    private readonly map = new Map<string, CacheEntry>();
+
+    get(uri: string, maxAgeMs: number): AnalysisResult | undefined {
+        const entry = this.map.get(uri);
+        if (!entry) return undefined;
+        if (Date.now() > entry.expiresAt) { this.map.delete(uri); return undefined; }
+        return entry.result;
+    }
+
+    set(uri: string, result: AnalysisResult, maxAgeMs: number): void {
+        this.map.set(uri, { result, expiresAt: Date.now() + maxAgeMs });
+    }
+
+    invalidate(uri: string): void { this.map.delete(uri); }
+    clear(): void { this.map.clear(); }
 }
 
 // ─── Quick-fix database ───────────────────────────────────────────────────────
@@ -121,6 +195,21 @@ const QUICK_FIX_DB: Record<string, FixEntry> = {
 };
 
 export class DartAnalyzer {
+
+    private readonly cache = new ResultCache();
+    private readonly debouncer = new Debouncer();
+    private readonly inFlight = new Map<string, Promise<AnalysisResult>>();
+    private readonly options: Required<AnalyzerOptions>;
+
+    constructor(options: AnalyzerOptions = {}) {
+        this.options = {
+            debounceMs: options.debounceMs ?? 600,
+            cacheMaxAgeMs: options.cacheMaxAgeMs ?? 8_000,
+            analyseDirtyBuffers: options.analyseDirtyBuffers ?? false,
+            extraFlags: options.extraFlags ?? [],
+        };
+    }
+
     async analyzeDocument(document: vscode.TextDocument): Promise<DartError[]> {
         const errors: DartError[] = [];
         const text = document.getText();
@@ -133,10 +222,12 @@ export class DartAnalyzer {
             //Missing semicolons
             if (this.isMissingSemicolon(line, i, lines)) {
                 errors.push({
+                    id: `missing_semicolon:${i}`,
                     line: i,
                     column: line.length,
                     message: 'Missing semicolon',
-                    severity: 'error'
+                    severity: 'error',
+                    source: 'dart_analyze'
                 });
             }
 
@@ -151,20 +242,24 @@ export class DartAnalyzer {
             // Unused imports
             if (line.trim().startsWith('import ') && this.isUnusedImport(line, text)) {
                 errors.push({
+                    id: `unused_import:${i}`,
                     line: i,
                     column: 0,
                     message: 'Unused import',
-                    severity: 'warning'
+                    severity: 'warning',
+                    source: 'dart_analyze'
                 });
             }
 
             // Missing return statements
             if (this.isMissingReturn(line, i, lines)) {
                 errors.push({
+                    id: `missing_return:${i}`,
                     line: i,
                     column: 0,
                     message: 'Missing return statement',
-                    severity: 'error'
+                    severity: 'error',
+                    source: 'dart_analyze'
                 });
             }
 
@@ -249,10 +344,12 @@ export class DartAnalyzer {
             const beforeMatch = line.substring(0, match.index || 0);
             if (!beforeMatch.includes('.') && !beforeMatch.includes('(')) {
                 errors.push({
+                    id: `undefined_variable:${index}:${match.index || 0}`,
                     line: index,
                     column: match.index || 0,
                     message: `Undefined name '${varName}'`,
-                    severity: 'warning'  // ← Changed to WARNING (less aggressive)
+                    severity: 'warning',  // ← Changed to WARNING (less aggressive)
+                    source: 'dart_analyze'
                 });
             }
         }
@@ -282,19 +379,23 @@ export class DartAnalyzer {
 
         if (stringToInt) {
             errors.push({
+                id: `type_mismatch:${index}:0`,
                 line: index,
                 column: 0,
                 message: 'Type mismatch: Cannot assign String to int',
-                severity: 'warning'  // ← Changed to WARNING
+                severity: 'warning',  // ← Changed to WARNING
+                source: 'dart_analyze'
             });
         }
 
         if (intToString) {
             errors.push({
+                id: `type_mismatch:${index}:0`,
                 line: index,
                 column: 0,
                 message: 'Type mismatch: Cannot assign int to String',
-                severity: 'warning'  // ← Changed to WARNING
+                severity: 'warning',  // ← Changed to WARNING
+                source: 'dart_analyze'
             });
         }
 
@@ -351,10 +452,12 @@ export class DartAnalyzer {
         for (const item of deprecated) {
             if (line.includes(item.old)) {
                 errors.push({
+                    id: `deprecated_api:${index}:${line.indexOf(item.old)}`,
                     line: index,
                     column: line.indexOf(item.old),
                     message: `Deprecated: ${item.message}`,
-                    severity: 'warning'
+                    severity: 'warning',
+                    source: 'dart_analyze'
                 });
             }
         }
@@ -391,10 +494,12 @@ export class DartAnalyzer {
         // Example: "int count;" (no = value)
         if (/^\s*(int|String|bool|double)\s+\w+\s*;/.test(trimmed) && !line.includes('=') && !line.includes('?')) {
             errors.push({
+                id: `non_nullable_field:${index}:0`,
                 line: index,
                 column: 0,
                 message: 'Non-nullable field should be initialized',
-                severity: 'warning'  // ← Changed to WARNING
+                severity: 'warning',  // ← Changed to WARNING
+                source: 'dart_analyze'
             });
         }
 
@@ -429,9 +534,7 @@ export class DartAnalyzer {
         return false;
     }
 
-    getQuickFix(error: DartError): QuickFixSuggestion | null {
-        return QUICK_FIX_DB[error.code]?.fix ?? this._inferGenericFix(error) ?? null;
-    }
+
 
     /** Produce a generic fix hint from the error message when no DB entry exists. */
     private _inferGenericFix(error: DartError): QuickFixSuggestion | null {
@@ -444,4 +547,250 @@ export class DartAnalyzer {
         if (msg.includes('type')) return { title: 'Review type annotation or cast', kind: 'replace' };
         return null;
     }
+
+
+    // ── Public API ─────────────────────────────────────────────────────────────
+
+
+
+    /**
+     * Schedule a debounced analysis — useful in onDidChangeTextDocument handlers.
+     * Calls back with results once the quiet period elapses.
+     */
+    scheduleAnalysis(
+        document: vscode.TextDocument,
+        callback: (errors: DartError[]) => void
+    ): void {
+        if (document.languageId !== 'dart') return;
+        const uri = document.uri.toString();
+        this.debouncer.schedule(uri, async () => {
+            const errors = await this.analyzeDocument(document);
+            callback(errors);
+        }, this.options.debounceMs);
+    }
+
+    /**
+     * Analyse every Dart file currently open in the workspace.
+     * Returns a map of file URI → errors.
+     */
+    async analyzeWorkspace(): Promise<Map<string, DartError[]>> {
+        const dartFiles = await vscode.workspace.findFiles('**/*.dart', '**/build/**');
+        const results = new Map<string, DartError[]>();
+
+        await Promise.allSettled(
+            dartFiles.map(async (uri) => {
+                try {
+                    const doc = await vscode.workspace.openTextDocument(uri);
+                    const errors = await this.analyzeDocument(doc);
+                    results.set(uri.toString(), errors);
+                } catch {
+                    // individual file failures don't abort the batch
+                }
+            })
+        );
+
+        return results;
+    }
+
+    /**
+     * Run `dart fix --apply` on a file, then invalidate its cache entry.
+     */
+    async applyDartFix(document: vscode.TextDocument): Promise<void> {
+        if (document.languageId !== 'dart') return;
+        const dartBin = this._dartBin();
+        const workspaceRoot = this._workspaceRoot();
+
+        return new Promise((resolve, reject) => {
+            cp.exec(
+                `"${dartBin}" fix --apply "${document.fileName}"`,
+                { cwd: workspaceRoot },
+                (err) => {
+                    this.cache.invalidate(document.uri.toString());
+                    err ? reject(err) : resolve();
+                }
+            );
+        });
+    }
+
+    /** Force-invalidate the cache for a specific file. */
+    invalidateCache(uri: string): void {
+        this.cache.invalidate(uri);
+    }
+
+    /** Clear the entire result cache. */
+    clearCache(): void {
+        this.cache.clear();
+    }
+
+    /** Get a quick-fix suggestion for a given error code. */
+    getQuickFix(error: DartError): QuickFixSuggestion | null {
+        const entry = error.code ? QUICK_FIX_DB[error.code] : undefined;
+        return entry?.fix ?? this._inferGenericFix(error) ?? null;
+    }
+
+    /** Get the documentation URL for a given error code. */
+    getDocumentationUrl(code: string): string | undefined {
+        return QUICK_FIX_DB[code]?.documentationUrl;
+    }
+
+    /**
+     * Convert DartErrors to VS Code Diagnostics for use with
+     * vscode.languages.createDiagnosticCollection().
+     */
+    toDiagnostics(errors: DartError[]): vscode.Diagnostic[] {
+        return errors.map(e => {
+            const start = new vscode.Position(e.line, e.column);
+            const end = new vscode.Position(e.endLine ?? e.line, e.endColumn ?? e.column + 1);
+            const diag = new vscode.Diagnostic(
+                new vscode.Range(start, end),
+                e.message,
+                this._vscodeSeverity(e.severity)
+            );
+            diag.source = e.source;
+            diag.code = e.documentationUrl
+                ? { value: e.code ?? e.documentationUrl, target: vscode.Uri.parse(e.documentationUrl) }
+                : e.code;
+            return diag;
+        });
+    }
+
+    dispose(): void {
+        this.debouncer.cancelAll();
+        this.cache.clear();
+        this.inFlight.clear();
+    }
+
+    // ── Private ────────────────────────────────────────────────────────────────
+
+    /** Run analysis or join an already-in-flight request for the same file. */
+    private _runOrJoin(uri: string, filePath: string): Promise<AnalysisResult> {
+        const existing = this.inFlight.get(uri);
+        if (existing) return existing;
+
+        const promise = this._runAnalysis(uri, filePath).finally(() => {
+            this.inFlight.delete(uri);
+        });
+
+        this.inFlight.set(uri, promise);
+        return promise;
+    }
+
+    private _runAnalysis(uri: string, filePath: string): Promise<AnalysisResult> {
+        return new Promise((resolve) => {
+            const dartBin = this._dartBin();
+            const workspaceRoot = this._workspaceRoot();
+            const extraFlags = this.options.extraFlags.join(' ');
+            const startMs = Date.now();
+
+            cp.exec(
+                `"${dartBin}" analyze "${filePath}" --format=json ${extraFlags}`.trim(),
+                { cwd: workspaceRoot, maxBuffer: 4 * 1024 * 1024 },
+                (_err, stdout) => {
+                    const durationMs = Date.now() - startMs;
+
+                    if (!stdout?.trim()) {
+                        const empty = this._makeResult(uri, [], durationMs, false);
+                        this.cache.set(uri, empty, this.options.cacheMaxAgeMs);
+                        return resolve(empty);
+                    }
+
+                    try {
+                        const json = JSON.parse(stdout);
+                        const errors = (json.diagnostics ?? []).map((d: any) =>
+                            this._mapDiagnostic(d)
+                        );
+                        const deduped = this._deduplicate(errors);
+                        const result = this._makeResult(uri, deduped, durationMs, false);
+                        this.cache.set(uri, result, this.options.cacheMaxAgeMs);
+                        resolve(result);
+                    } catch {
+                        // Never surface false positives on malformed output
+                        const empty = this._makeResult(uri, [], durationMs, false);
+                        resolve(empty);
+                    }
+                }
+            );
+        });
+    }
+
+    private _mapDiagnostic(d: any): DartError {
+        const startLine = Math.max(0, (d.location?.range?.start?.line ?? 1) - 1);
+        const startCol = Math.max(0, (d.location?.range?.start?.column ?? 1) - 1);
+        const endLine = Math.max(0, (d.location?.range?.end?.line ?? 1) - 1);
+        const endCol = Math.max(0, (d.location?.range?.end?.column ?? 1) - 1);
+        const code = (d.code ?? '').toString();
+        const severity = this._mapSeverity(d.severity);
+        const message = d.message ?? 'Unknown diagnostic';
+        const id = this._errorId(code, startLine, startCol);
+        const fixEntry = QUICK_FIX_DB[code];
+
+        return {
+            id,
+            line: startLine,
+            column: startCol,
+            endLine: endLine !== startLine ? endLine : undefined,
+            endColumn: endCol !== startCol ? endCol : undefined,
+            message,
+            severity,
+            code,
+            source: 'dart_analyze',
+            quickFix: fixEntry?.fix,
+            documentationUrl: fixEntry?.documentationUrl
+                ?? (code ? `https://dart.dev/tools/diagnostic-messages#${code}` : undefined),
+        };
+    }
+
+    private _mapSeverity(raw: string): DiagnosticSeverity {
+        switch ((raw ?? '').toUpperCase()) {
+            case 'ERROR': return 'error';
+            case 'WARNING': return 'warning';
+            case 'HINT': return 'hint';
+            default: return 'info';
+        }
+    }
+
+    private _vscodeSeverity(s: DiagnosticSeverity): vscode.DiagnosticSeverity {
+        switch (s) {
+            case 'error': return vscode.DiagnosticSeverity.Error;
+            case 'warning': return vscode.DiagnosticSeverity.Warning;
+            case 'hint': return vscode.DiagnosticSeverity.Hint;
+            default: return vscode.DiagnosticSeverity.Information;
+        }
+    }
+
+    private _deduplicate(errors: DartError[]): DartError[] {
+        const seen = new Map<string, DartError>();
+        for (const e of errors) {
+            if (!seen.has(e.id)) seen.set(e.id, e);
+        }
+        return Array.from(seen.values());
+    }
+
+    private _errorId(code: string, line: number, col: number): string {
+        return `${code}:${line}:${col}`;
+    }
+
+    private _makeResult(
+        uri: string,
+        errors: DartError[],
+        durationMs: number,
+        fromCache: boolean
+    ): AnalysisResult {
+        return { uri, errors, analyzedAt: Date.now(), durationMs, fromCache };
+    }
+
+    /** Resolve the Dart SDK binary path, respecting dart.sdkPath setting. */
+    private _dartBin(): string {
+        const sdkPath = vscode.workspace
+            .getConfiguration('dart')
+            .get<string>('sdkPath');
+        return sdkPath ? path.join(sdkPath, 'bin', 'dart') : 'dart';
+    }
+
+    private _workspaceRoot(): string | undefined {
+        return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    }
+
+
+
 }
