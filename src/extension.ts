@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * DART AI ASSISTANT PRO - VS CODE EXTENSION
+ * Dart AI Assistant - VS CODE EXTENSION
  * ============================================================================
  * 
  * A comprehensive Dart/Flutter IDE productivity tool with:
@@ -273,7 +273,7 @@ function getErrorPrevention(): ErrorPrevention {
  */
 export async function activate(context: vscode.ExtensionContext) {
     try {
-        console.log('🚀 Dart AI Assistant Pro is initializing...');
+        console.log('🚀 Dart AI Assistant is initializing...');
 
         // ====================================================================
         // INITIALIZE CORE SERVICES
@@ -399,16 +399,16 @@ export async function activate(context: vscode.ExtensionContext) {
         // Setup learning engine watchers
         setupLearningWatchers(context);
 
-        console.log('Dart AI Assistant Pro activated successfully!');
+        console.log('Dart AI Assistant activated successfully!');
 
         // Show welcome message (but don't block if there's an error)
         vscode.window.showInformationMessage(
-            'Dart AI Assistant Pro ready! Ctrl+Shift+F to fix errors, Ctrl+Space for completions.'
+            'Dart AI Assistant ready! Ctrl+Shift+F to fix errors, Ctrl+Space for completions.'
         );
     } catch (error) {
 
         console.error('Critical error during extension activation:', error);
-        vscode.window.showErrorMessage('Dart AI Assistant Pro failed to activate. Check the console for details.');
+        vscode.window.showErrorMessage('Dart AI Assistant failed to activate. Check the console for details.');
     }
 
     /**
@@ -1818,7 +1818,7 @@ function getRecommendationsHtml(recommendations: any[]): string {
  * Called when VS Code unloads the extension
  */export function deactivate() {
     try {
-        console.log('🛑 Dart AI Assistant Pro is deactivating...');
+        console.log('🛑 Dart AI Assistant is deactivating...');
 
         // Save learning data before shutdown
         if (learningEngine) {
@@ -1854,7 +1854,7 @@ function getRecommendationsHtml(recommendations: any[]): string {
         predictionStatusBar = undefined;
         activeAIController = undefined;
 
-        console.log('✅ Dart AI Assistant Pro deactivated successfully');
+        console.log('✅ Dart AI Assistant deactivated successfully');
     } catch (error) {
         console.error('Error during deactivation:', error);
     }

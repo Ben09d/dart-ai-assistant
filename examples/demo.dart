@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-// Example Dart file demonstrating Dart AI Assistant Pro features
+// Example Dart file demonstrating Dart AI Assistant features
 
-/// This file demonstrates various features of Dart AI Assistant Pro
+/// This file demonstrates various features of Dart AI Assistant
 ///
 /// Features demonstrated:
 /// - Auto-correction
@@ -433,6 +433,14 @@ class ErrorHandlingExamples {
     }
   }
 
+  void testFunction() {
+    try {
+      print('test');
+    } catch (e) {
+      print('error: $e');
+    }
+  }
+
   // Try-catch-finally
   void handleWithFinally() {
     try {
@@ -462,7 +470,7 @@ class ErrorHandlingExamples {
 
 void main() async {
   print('='.padRight(60, '='));
-  print('Dart AI Assistant Pro - Feature Demonstration');
+  print('Dart AI Assistant - Feature Demonstration');
   print('='.padRight(60, '='));
   print('');
 

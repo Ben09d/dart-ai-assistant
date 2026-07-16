@@ -1,4 +1,4 @@
-# 🚀 Quick Start Guide - Dart AI Assistant Pro
+# 🚀 Quick Start Guide - Dart AI Assistant
 
 Get up and running in 5 minutes!
 
@@ -203,7 +203,7 @@ Over time, suggestions become more personalized!
 
 ## 🎉 You're Ready!
 
-Start coding and let Dart AI Assistant Pro help you write better code faster!
+Start coding and let Dart AI Assistant help you write better code faster!
 
 ### Next Steps:
 

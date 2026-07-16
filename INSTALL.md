@@ -13,7 +13,7 @@
 
 1. Open Visual Studio Code
 2. Click on the Extensions icon in the sidebar (or press `Ctrl+Shift+X` / `Cmd+Shift+X`)
-3. Search for "Dart AI Assistant Pro"
+3. Search for "Dart AI Assistant"
 4. Click "Install"
 5. Reload VS Code when prompted
 
@@ -108,7 +108,7 @@ code .
 
 ### 2. Verify Extension is Active
 
-Look for "Dart AI Assistant Pro activated!" message in the output panel.
+Look for "Dart AI Assistant activated!" message in the output panel.
 
 ### 3. Try Basic Features
 
@@ -176,7 +176,7 @@ Look for "Dart AI Assistant Pro activated!" message in the output panel.
 VS Code automatically updates extensions. To manually check:
 
 1. Go to Extensions
-2. Find "Dart AI Assistant Pro"
+2. Find "Dart AI Assistant"
 3. Click "Update" if available
 
 ### Manual Update
@@ -190,7 +190,7 @@ VS Code automatically updates extensions. To manually check:
 ### Clean Uninstall
 
 1. Go to Extensions in VS Code
-2. Find "Dart AI Assistant Pro"
+2. Find "Dart AI Assistant"
 3. Click "Uninstall"
 4. Reload VS Code
 
@@ -252,4 +252,4 @@ A: Yes, the learning engine creates custom snippets from your patterns.
 
 ---
 
-**Happy coding with Dart AI Assistant Pro!** 🎉
+**Happy coding with Dart AI Assistant!** 🎉

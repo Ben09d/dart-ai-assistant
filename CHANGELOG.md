@@ -1,11 +1,11 @@
 # Change Log
 
-All notable changes to the "Dart AI Assistant Pro" extension will be documented in this file.
+All notable changes to the "Dart AI Assistant" extension will be documented in this file.
 
 ## [1.0.0] - 2024-02-14
 
 ### Added
-- 🎉 Initial release of Dart AI Assistant Pro
+- 🎉 Initial release of Dart AI Assistant
 - 🤖 AI-powered code completion and suggestions
 - ⚡ Automatic error correction
 - 🧠 Learning engine that adapts to your coding style
@@ -69,4 +69,4 @@ All notable changes to the "Dart AI Assistant Pro" extension will be documented 
 
 ---
 
-**Thank you for using Dart AI Assistant Pro!**
+**Thank you for using Dart AI Assistant!**

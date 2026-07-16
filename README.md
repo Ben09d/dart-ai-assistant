@@ -1,4 +1,4 @@
-# 🚀 Dart AI Assistant Pro
+# 🚀 Dart AI Assistant
 
 AI-powered Dart/Flutter development assistant with real-time learning, code prediction, and intelligent error detection.
 
