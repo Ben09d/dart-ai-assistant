@@ -282,6 +282,9 @@ export class DartAnalyzer {
             trimmed.startsWith('//') ||
             trimmed.startsWith('/*') ||
             trimmed.endsWith('{') ||
+            trimmed.endsWith('[') ||
+            trimmed.endsWith(']') ||
+            trimmed.endsWith('{') ||
             trimmed.endsWith('}') ||
             trimmed.endsWith(',') ||
             trimmed.endsWith('(') ||    // ← ADD: Skip opening parens
@@ -315,10 +318,21 @@ export class DartAnalyzer {
         const errors: DartError[] = [];
 
         // Skip if line contains these (too complex to analyze)
-        if (line.includes('.') ||              // ← Skip dot notation (properties)
-            line.includes('(') ||              // ← Skip function calls
-            line.includes('[') ||              // ← Skip indexing
-            line.startsWith('//')) {           // ← Skip comments
+        const trimmedLine = line.trim();
+        if (line.includes('.') ||
+            line.includes('(') ||
+            line.includes('[') ||
+            line.includes(':') ||
+            line.includes('<') ||              // ← ADD: Skip generics
+            line.includes('>') ||              // ← ADD: Skip generics
+            trimmedLine.startsWith('//') ||
+            trimmedLine.startsWith('@') ||     // ← ADD: Skip annotations (@override, etc)
+            trimmedLine.startsWith('?') ||
+            trimmedLine.startsWith(':') ||
+            trimmedLine.startsWith(',') ||
+            trimmedLine.startsWith(')') ||
+            trimmedLine.startsWith('class ') ||  // ← ADD: Skip class declarations
+            /^(var|final|const|int|String|double|bool|dynamic|List|Map|Set)\s+/.test(trimmedLine)) {
             return errors;
         }
 
@@ -330,7 +344,7 @@ export class DartAnalyzer {
             const varName = match[1];
 
             // Skip common Dart built-ins
-            const builtIns = ['print', 'assert', 'throw', 'return', 'var', 'final', 'const', 'int', 'String', 'bool', 'List', 'Map', 'dynamic'];
+            const builtIns = ['print', 'assert', 'throw', 'return', 'var', 'final', 'const', 'int', 'String', 'bool', 'List', 'Map', 'dynamic', 'Future', 'void', 'null', 'true', 'false', 'String?', 'int?', 'double?', 'bool?', 'List?', 'Map?', 'rethrow'];
             if (builtIns.includes(varName) || this.isDartKeyword(varName)) {
                 continue;
             }
@@ -366,9 +380,12 @@ export class DartAnalyzer {
             trimmed.startsWith('/*') ||
             trimmed.includes('as ') ||           // ← Skip type casts
             trimmed.includes('is ') ||           // ← Skip type checks
+            trimmed.includes('on ') ||             // ← Skip arrow functions
             line.includes('toString()') ||       // ← Skip conversions
             line.includes('toInt()') ||
             line.includes('int.parse') ||
+            line.includes('double.parse') ||
+            line.includes('rethrow') ||
             line.includes('String.from')) {
             return errors;
         }
@@ -406,17 +423,27 @@ export class DartAnalyzer {
         if (!match) return false;
 
         const importPath = match[1];
-        const packageName = importPath.split('/').pop()?.replace('.dart', '');
 
+        // Skip package imports (flutter, dart:, third-party) — too unreliable
+        // to check by filename since they export named classes, not the
+        // package name itself (e.g. 'material.dart' exports MaterialApp, not "material")
+        if (importPath.startsWith('package:') || importPath.startsWith('dart:')) {
+            return false;
+        }
+
+        const packageName = importPath.split('/').pop()?.replace('.dart', '');
         if (!packageName) return false;
 
-        // Simple check: if package name doesn't appear elsewhere in text
+        // Only check LOCAL project file imports (relative paths)
         const occurrences = (fullText.match(new RegExp(packageName, 'g')) || []).length;
-        return occurrences <= 1; // Only in the import statement itself
+        return occurrences <= 1;
     }
 
     private isMissingReturn(line: string, index: number, lines: string[]): boolean {
         const trimmed = line.trim();
+
+        // Skip control-flow keywords that look like function declarations
+        if (/^(if|for|return|while|switch|rethrow|catch|on|try|else)\b/.test(trimmed)) return false;
 
         // Check if this is a function declaration with return type
         const functionMatch = trimmed.match(/(\w+)\s+(\w+)\s*\([^)]*\)\s*{/);

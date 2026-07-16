@@ -8,7 +8,7 @@ export class CodeFormatter {
         // Apply Dart formatting rules
         formatted = this.formatImports(formatted); // saves well
         // //formatted = this.formatIndentation(formatted);
-        formatted = this.formatSpacing(formatted);// saves then unsaves
+        formatted = this.formatSpacingCorrected(formatted);// saves then unsaves
         formatted = this.formatBraces(formatted); //saves well
         formatted = this.formatCommas(formatted);//deletes ma files when saving
         formatted = this.removeTrailingWhitespace(formatted); //saves well
@@ -218,11 +218,17 @@ export class CodeFormatter {
             }
 
             // Add trailing comma when next line closes a bracket
+            // Add trailing comma when next line closes a bracket
             if (next.startsWith(')') || next.startsWith(']')) {
-                formatted[i] = line.trimEnd() + ',';
+                formatted.push(line.trimEnd() + ',');
             } else {
-                formatted.push(line);  // ← ADD THIS: push original
+                formatted.push(line);
             }
+        }
+
+        // Push the final line (loop above stops at length - 1)
+        if (lines.length > 0) {
+            formatted.push(lines[lines.length - 1]);
         }
 
         return formatted.join('\n');
@@ -281,30 +287,44 @@ export class CodeFormatter {
     // never partially match inside a compound operator, and re-running this
     // method on already-formatted code is a true no-op.
 
-    private formatSpacingCorrected(code: string): string {
-        return code.split('\n').map(line =>
+    private formatSpacingCorrected(text: string): string {// Process line by line to avoid touching strings and comments
+        //
+        // FIXED: the original version of this method (/([^=!<>])=(?![=>])/g)
+        // did not check whether the character before `=` was already a
+        // space, so every save/format call widened the gap around every
+        // assignment operator by one more space. Confirmed via direct
+        // testing: 3 successive calls on "final x = 5;\n" produced
+        // "final x  =  5;\n", "final x   =   5;\n", "final x    =    5;\n" —
+        // strictly growing, never stabilising. This is the identical bug
+        // independently confirmed in services/codeFormatter.ts's
+        // formatSpacing(), evidently copy-pasted between the two files.
+        //
+        // Fix: process compound operators (==, !=, <=, >=, =>) first via
+        // placeholders, THEN space bare `=`, so the bare-equals pass can
+        // never partially match inside a compound operator and re-running
+        // this method on already-formatted code is a true no-op.
+        return text.split('\n').map(line =>
             this.withStringProtection(line, (safe) => {
                 // Keywords
                 safe = safe.replace(/\b(if|for|while|switch|catch)\(/g, '$1 (');
 
                 // Step 1: normalise spacing around compound operators FIRST,
-                // replacing each match with a null-byte placeholder so the
-                // later bare-`=` pass cannot see or touch them.
+                // swapping each match for a placeholder so the bare-`=` pass
+                // below cannot see or touch them.
                 const placeholders: string[] = [];
-                safe = safe.replace(/\s*(==|!=|<=|>=|=>)\s*/g, (_match, op) => {
+                safe = safe.replace(/\s*(==|!=|<=|>=|=>|\+=|-=|\*=|\/=)\s*/g, (_match, op) => {
                     placeholders.push(` ${op} `);
                     return `\u0000P${placeholders.length - 1}\u0000`;
                 });
 
                 // Step 2: space bare assignment `=`. Safe now — every
-                // compound operator has already been swapped for a
-                // placeholder, so this can only match real assignment.
+                // compound operator is already a placeholder.
                 safe = safe.replace(/\s*=\s*/g, ' = ');
 
                 // Step 3: restore the compound operators.
                 safe = safe.replace(/\u0000P(\d+)\u0000/g, (_match, i) => placeholders[parseInt(i, 10)]);
 
-                // Comma spacing — same as the original, this part had no bug.
+                // Comma spacing — unchanged, this part had no bug.
                 safe = safe.replace(/,(?!\s)(?!$)/g, ', ');
 
                 return safe;

@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { DartAnalyzer } from '../services/dartAnalyzer';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -444,7 +443,7 @@ export class ErrorPrevention {
     private readonly lineRules: LineRule[] = [...LINE_RULES];
     private readonly multiLineRules: MultiLineRule[] = [...MULTI_LINE_RULES];
 
-    constructor(private readonly dartAnalyzer: DartAnalyzer) { }
+    constructor() { }
 
     // ── Public API ─────────────────────────────────────────────────────────────
 

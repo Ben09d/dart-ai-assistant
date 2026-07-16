@@ -259,7 +259,7 @@ function getAdvancedCompletionEngine(context: vscode.ExtensionContext): Advanced
 
 function getErrorPrevention(): ErrorPrevention {
     if (!errorPrevention) {
-        errorPrevention = new ErrorPrevention(getDartAnalyzer());
+        errorPrevention = new ErrorPrevention();
     }
     return errorPrevention!;
 }
@@ -313,7 +313,7 @@ export async function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(
             vscode.window.onDidChangeActiveTextEditor((editor) => {
                 if (editor?.document.languageId === 'dart') {
-                    updateHealthStatusBarForDocument(editor.document);
+                    updateHealthStatusBarForDocument(editor.document, context);
                 } else {
                     updateHealthStatusBar();
                 }
@@ -329,17 +329,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // ── Additive: register the new commands defined further below ──────────
         // Avoid duplicate registration if commands already exist (prevents
         // "command ... already exists" errors when the extension reloads).
-        try {
-            const existing = await vscode.commands.getCommands(true);
-            if (!existing.includes('dartAI.showCodeHealth')) {
-                registerAdditionalCommands(context);
-            } else {
-                console.log('Skipping additional command registration; commands already present');
-            }
-        } catch (err) {
-            console.warn('Could not check existing commands:', err);
-            registerAdditionalCommands(context);
-        }
+        registerAdditionalCommands(context);
 
         // ── Status bar ──────────────────────────────────────────────
         const statusBar = vscode.window.createStatusBarItem(
@@ -398,18 +388,7 @@ export async function activate(context: vscode.ExtensionContext) {
             console.warn('Error creating prediction status bar:', error);
         }
 
-        // Register commands (skip if already registered)
-        try {
-            const existing = await vscode.commands.getCommands(true);
-            if (!existing.includes('dartAI.fixErrors')) {
-                registerCommands(context);
-            } else {
-                console.log('Skipping main command registration; commands already present');
-            }
-        } catch (err) {
-            console.warn('Could not check existing commands:', err);
-            registerCommands(context);
-        }
+        registerCommands(context);
 
         // Setup auto-save formatting
         setupAutoFormatting(context);
@@ -440,7 +419,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (!healthStatusBar) return;
         const editor = vscode.window.activeTextEditor;
         if (editor && editor.document.languageId === 'dart') {
-            updateHealthStatusBarForDocument(editor.document);
+            updateHealthStatusBarForDocument(editor.document, context);
         } else {
             healthStatusBar.text = '$(circle-outline) Dart: —';
             healthStatusBar.tooltip = 'Open a Dart file to see code health';
@@ -449,8 +428,8 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     /** Synchronous-feeling wrapper that kicks off analysis for a specific document. */
-    function updateHealthStatusBarForDocument(document: vscode.TextDocument): void {
-        void runLiveAnalysis(document);
+    function updateHealthStatusBarForDocument(document: vscode.TextDocument, context: vscode.ExtensionContext): void {
+        void runLiveAnalysis(document, context);
     }
 
     /**
@@ -921,9 +900,6 @@ export async function activate(context: vscode.ExtensionContext) {
                         try {
                             const document = editor.document;
                             const errors = await getDartAnalyzer().analyzeDocument(document);
-                            const preventionProblems = await getErrorPrevention().getPreventableProblems(document);
-                            // Merge preventionProblems into your diagnostics array
-                            const allDiagnostics = [...errors, ...preventionProblems];
 
                             if (errors.length === 0) {
                                 vscode.window.showInformationMessage('✅ No errors found!');
@@ -1391,8 +1367,7 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
  * Debounced live analysis — runs errorPrevention + patternPredictor on every
  * keystroke but collapses rapid edits into a single pass per document,
  * matching the debounce pattern already used by DartAnalyzer/AIService.
- */
-function scheduleLiveAnalysis(document: vscode.TextDocument): void {
+ */function scheduleLiveAnalysis(document: vscode.TextDocument, context: vscode.ExtensionContext): void {
     const key = document.uri.toString();
     const existing = liveAnalysisTimers.get(key);
     if (existing) clearTimeout(existing);
@@ -1400,7 +1375,7 @@ function scheduleLiveAnalysis(document: vscode.TextDocument): void {
     const timer = setTimeout(async () => {
         liveAnalysisTimers.delete(key);
         try {
-            await runLiveAnalysis(document);
+            await runLiveAnalysis(document, context);
         } catch (err) {
             console.error('[dartAI] live analysis failed:', err);
         }
@@ -1408,7 +1383,6 @@ function scheduleLiveAnalysis(document: vscode.TextDocument): void {
 
     liveAnalysisTimers.set(key, timer);
 }
-
 /**
  * Runs the lightweight regex-based analysers (errorPrevention,
  * patternPredictor) and refreshes the code-health status bar item.
@@ -1416,11 +1390,11 @@ function scheduleLiveAnalysis(document: vscode.TextDocument): void {
  * save-time diagnostics via setupDiagnostics, unchanged above) so this
  * stays fast enough to run on every edit.
  */
-async function runLiveAnalysis(document: vscode.TextDocument): Promise<void> {
+async function runLiveAnalysis(document: vscode.TextDocument, context: vscode.ExtensionContext): Promise<void> {
     if (document.languageId !== 'dart') return;
 
     const errorPrevention = getErrorPrevention();
-    const patternPredictor = getPatternPredictor(vscode.window.activeTextEditor?.viewColumn ? { uri: document.uri } as any : undefined as any);
+    const patternPredictor = getPatternPredictor(context);
 
     if (!errorPrevention || !patternPredictor) return;
 
@@ -1447,17 +1421,26 @@ async function runLiveAnalysis(document: vscode.TextDocument): Promise<void> {
 
 }
 
+let isFormatting = false; // ← ADD: prevents re-trigger loop
 
 function setupAutoFormatting(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.workspace.onDidSaveTextDocument(async (document) => {
             try {
+                if (isFormatting) return; // ← ADD: skip if we caused this save
+
                 const config = vscode.workspace.getConfiguration('dartAI');
                 if (!config.get('autoFormat') || document.languageId !== 'dart') {
                     return;
                 }
 
-                const formatted = await getCodeFormatter().format(document.getText());
+                const original = document.getText();
+                const formatted = await getCodeFormatter().format(original);
+
+                // ← ADD: skip if nothing actually changed
+                if (formatted === original) return;
+
+                isFormatting = true; // ← ADD: lock
 
                 const edit = new vscode.WorkspaceEdit();
                 const fullRange = new vscode.Range(
@@ -1467,13 +1450,15 @@ function setupAutoFormatting(context: vscode.ExtensionContext) {
                 );
                 edit.replace(document.uri, fullRange, formatted);
                 await vscode.workspace.applyEdit(edit);
+                await document.save(); // ← ADD: save the formatted version
+
+                isFormatting = false; // ← ADD: unlock
             } catch (error) {
+                isFormatting = false; // ← ADD: unlock on error too
                 console.error('Error during auto-formatting:', error);
             }
         })
     );
-
-
 }
 
 
@@ -1495,7 +1480,7 @@ function setupDiagnostics(context: vscode.ExtensionContext) {
                     // Debounce
                     setTimeout(async () => {
                         try {
-                            const diagnostics = await getDiagnosticProvider().provideDiagnostics(event.document);
+                            const diagnostics = await getDiagnosticProvider().provideRichDiagnostics(event.document);
                             diagnosticCollection.set(event.document.uri, diagnostics);
                         } catch (error) {
                             console.error('Error providing diagnostics:', error);
@@ -1506,6 +1491,13 @@ function setupDiagnostics(context: vscode.ExtensionContext) {
                 }
             })
         );
+        // Live health status bar analysis (errorPrevention + patternPredictor)
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeTextDocument((event) => {
+                if (event.document.languageId !== 'dart') return;
+                scheduleLiveAnalysis(event.document, context);
+            })
+        );
 
         // Analyze on document open
         context.subscriptions.push(
@@ -1513,7 +1505,7 @@ function setupDiagnostics(context: vscode.ExtensionContext) {
                 try {
                     if (document.languageId !== 'dart') return;
 
-                    const diagnostics = await getDiagnosticProvider().provideDiagnostics(document);
+                    const diagnostics = await getDiagnosticProvider().provideRichDiagnostics(document);
                     diagnosticCollection.set(document.uri, diagnostics);
                 } catch (error) {
                     console.error('Error in onDidOpenTextDocument:', error);
@@ -1824,8 +1816,7 @@ function getRecommendationsHtml(recommendations: any[]): string {
 /**
  * Extension deactivation - cleanup and save state
  * Called when VS Code unloads the extension
- */
-export function deactivate() {
+ */export function deactivate() {
     try {
         console.log('🛑 Dart AI Assistant Pro is deactivating...');
 
@@ -1838,6 +1829,12 @@ export function deactivate() {
             console.log('💾 Saving advanced learning engine data...');
         }
 
+        // Clear any pending live-analysis timers
+        for (const timer of liveAnalysisTimers.values()) {
+            clearTimeout(timer);
+        }
+        liveAnalysisTimers.clear();
+
         // Cleanup services
         aiService = undefined;
         dartAnalyzer = undefined;
@@ -1847,6 +1844,15 @@ export function deactivate() {
         codeFormatter = undefined;
         diagnosticProvider = undefined;
         learningNotifications = undefined;
+        codePredictionEngine = undefined;
+        errorPrevention = undefined;
+        patternPredictor = undefined;
+        advancedCompletionEngine = undefined;
+        completionProvider = undefined;
+        codeActionProvider = undefined;
+        healthStatusBar = undefined;
+        predictionStatusBar = undefined;
+        activeAIController = undefined;
 
         console.log('✅ Dart AI Assistant Pro deactivated successfully');
     } catch (error) {

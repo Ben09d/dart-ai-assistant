@@ -8,18 +8,29 @@ export class LearningDashboard {
         this.learningEngine = learningEngine;
     }
 
-    showDashboard(): void {
-        const panel = vscode.window.createWebviewPanel(
-            'learningDashboard',
-            'Dart AI - Learning Dashboard',
-            vscode.ViewColumn.Beside,
-            { enableScripts: true }
-        );
+   showDashboard(): void {
+    const panel = vscode.window.createWebviewPanel(
+        'learningDashboard',
+        'Dart AI - Learning Dashboard',
+        vscode.ViewColumn.Beside,
+        { enableScripts: true }
+    );
 
+    const refresh = () => {
         const stats = this.learningEngine.getStatistics();
         panel.webview.html = this.generateDashboardHTML(stats);
-    }
+    };
 
+    refresh(); // Initial load
+
+    // Auto-refresh every 5 seconds while panel is open
+    const interval = setInterval(refresh, 5000);
+
+    // Stop refreshing when panel closes (prevents memory leak)
+    panel.onDidDispose(() => {
+        clearInterval(interval);
+    });
+}
     private generateDashboardHTML(stats: any): string {
         const {
             totalPatterns,
