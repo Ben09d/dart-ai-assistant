@@ -5,12 +5,12 @@ Get up and running in 5 minutes!
 ## ⚡ Installation
 
 ```bash
-# Option 1: From VS Code
+# Option 1: From the VS Code Marketplace
 # Press Ctrl+P and paste:
-ext install dart-ai-assistant
+ext install a-i-0-studio.dart-ai-assistant
 
 # Option 2: Build from source
-git clone https://github.com/yourusername/dart-ai-assistant.git
+git clone https://github.com/Ben09d/dart-ai-assistant.git
 cd dart-ai-assistant
 npm install
 npm run compile
@@ -18,11 +18,19 @@ npm run compile
 
 ## 🎯 First Steps
 
-### 1. Open a Dart File
+### 1. Import an Existing Project (Optional, but Recommended)
+
+Skip weeks of organic learning — train the extension instantly on a project you already have:
+
+1. Press `Ctrl+Shift+P` / `Cmd+Shift+P`
+2. Type: "Dart AI: Import Project for Learning"
+3. Pick a folder — the extension learns your naming conventions, patterns, and code style from it immediately
+
+### 2. Open a Dart File
 
 Create or open any `.dart` file. The extension activates automatically!
 
-### 2. Try Auto-Fix
+### 3. Try Auto-Fix
 
 ```dart
 // Write some code with an error (missing semicolon):
@@ -33,7 +41,7 @@ String message = "Hello"
 String message = "Hello";
 ```
 
-### 3. Test Smart Completion
+### 4. Test Smart Completion
 
 ```dart
 // Type "Fut" and press Ctrl+Space:
@@ -43,13 +51,19 @@ Future<dynamic> myFunction() async {
 }
 ```
 
-### 4. Run Security Scan
+### 5. Run Security Scan
 
 1. Press `Ctrl+Shift+P` / `Cmd+Shift+P`
 2. Type: "Dart AI: Security Scan"
 3. View comprehensive security report!
 
-### 5. Optimize Your Code
+### 6. Check Code Health
+
+1. Press `Ctrl+Shift+P` / `Cmd+Shift+P`
+2. Type: "Dart AI: Show Code Health"
+3. Click any issue to jump straight to that line — the report auto-refreshes as you save
+
+### 7. Optimize Your Code
 
 ```dart
 // Select this code:
@@ -78,10 +92,13 @@ final doubled = items.map((n) => n * 2).toList();
 Open Command Palette and type:
 
 - `Dart AI: Fix All Errors` - Auto-fix detected errors
+- `Dart AI: Import Project for Learning` - Instantly train on an existing project
 - `Dart AI: Security Scan` - Run security analysis
 - `Dart AI: Optimize Code` - Get optimization tips
+- `Dart AI: Show Code Health` - Clickable, auto-refreshing issue report
 - `Dart AI: Explain Code` - Understand complex code
 - `Dart AI: Generate Tests` - Create unit tests
+- `Dart AI: Search Knowledge Base` - Search imported docs and notes
 
 ## ⚙️ Recommended Settings
 
@@ -156,15 +173,17 @@ The extension learns your style:
 3. **Import Preferences**: Your favorite packages
 4. **Fix History**: Remembers how you fix errors
 
-Over time, suggestions become more personalized!
+Over time, suggestions become more personalized — or use **"Import Project for Learning"** to get there instantly.
 
 ## ✅ Pro Tips
 
-1. **Save Often**: Auto-formatting happens on save
-2. **Review Fixes**: Always review auto-generated fixes
-3. **Run Scans**: Regular security scans prevent issues
-4. **Enable Learning**: Get better suggestions over time
-5. **Use Shortcuts**: Much faster than menus
+1. **Import First**: Run "Import Project for Learning" on an old project before starting a new one
+2. **Save Often**: Auto-formatting and real syntax checking happen on save
+3. **Review Fixes**: Always review auto-generated fixes
+4. **Run Scans**: Regular security scans prevent issues
+5. **Enable Learning**: Get better suggestions over time
+6. **Use Shortcuts**: Much faster than menus
+7. **Keep the Dart Extension Installed**: This extension complements the official Dart/Flutter tooling — it doesn't replace it
 
 ## 🐛 Troubleshooting
 
@@ -175,6 +194,14 @@ Over time, suggestions become more personalized!
 2. Reload VS Code: Ctrl+Shift+P → "Reload Window"
 3. Check Output panel for errors
 4. Reinstall extension
+```
+
+### Syntax Errors Not Showing?
+
+```bash
+1. Confirm the Dart SDK is installed: dart --version
+2. Make sure the file is saved (real syntax checking runs on save)
+3. Confirm the file is inside a folder with a pubspec.yaml
 ```
 
 ### Completions Too Slow?
@@ -197,9 +224,8 @@ Over time, suggestions become more personalized!
 ## 📚 Learn More
 
 - [Full Documentation](README.md)
-- [Installation Guide](INSTALL.md)
-- [Example Code](examples/demo.dart)
 - [Changelog](CHANGELOG.md)
+- [Example Code](examples/demo.dart)
 
 ## 🎉 You're Ready!
 
@@ -215,6 +241,6 @@ Start coding and let Dart AI Assistant help you write better code faster!
 
 ---
 
-**Need Help?** Open an issue on GitHub or email support@dartai.dev
+**Need Help?** Open an issue on [GitHub](https://github.com/Ben09d/dart-ai-assistant/issues)
 
 **Happy Coding!** 🎯
