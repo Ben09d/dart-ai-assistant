@@ -440,7 +440,7 @@ const MULTI_LINE_RULES: MultiLineRule[] = [
  * - getPreventionStats() now includes per-category breakdown and most-common category.
  */
 export class ErrorPrevention {
-    private readonly lineRules: LineRule[] = [...LINE_RULES];
+    // private readonly lineRules: LineRule[] = [...LINE_RULES];
     private readonly multiLineRules: MultiLineRule[] = [...MULTI_LINE_RULES];
 
     constructor() { }
@@ -448,11 +448,11 @@ export class ErrorPrevention {
     // ── Public API ─────────────────────────────────────────────────────────────
 
     /** Add a custom single-line rule at runtime. */
-    registerLineRule(rule: LineRule): void {
-        if (!this.lineRules.some(r => r.id === rule.id)) {
-            this.lineRules.push(rule);
-        }
-    }
+    // registerLineRule(rule: LineRule): void {
+    //     if (!this.lineRules.some(r => r.id === rule.id)) {
+    //         this.lineRules.push(rule);
+    //     }
+    // }
 
     /** Add a custom multi-line rule at runtime. */
     registerMultiLineRule(rule: MultiLineRule): void {
@@ -520,11 +520,11 @@ export class ErrorPrevention {
             byCategory[category] = (byCategory[category] ?? 0) + 1;
         };
 
-        for (const line of lines) {
-            for (const rule of this.lineRules) {
-                if (rule.pattern.test(line)) bump(rule.severity, rule.category);
-            }
-        }
+        // for (const line of lines) {
+        //     for (const rule of this.lineRules) {
+        //         if (rule.pattern.test(line)) bump(rule.severity, rule.category);
+        //     }
+        // }
 
         for (const rule of this.multiLineRules) {
             const hits = rule.detect(lines, joined);
@@ -554,25 +554,25 @@ export class ErrorPrevention {
             const line = lines[i];
             if (line.trim().startsWith('//')) continue; // skip comment lines
 
-            for (const rule of this.lineRules) {
-                const match = line.match(rule.pattern);
-                if (!match) continue;
+            // for (const rule of this.lineRules) {
+            //     const match = line.match(rule.pattern);
+            //     if (!match) continue;
 
-                const column = line.search(/\S/);
-                results.push({
-                    id: `${rule.id}:${i}`,
-                    category: rule.category,
-                    line: i,
-                    column: column < 0 ? 0 : column,
-                    endColumn: column + (match[0]?.length ?? 10),
-                    severity: rule.severity,
-                    message: rule.message,
-                    suggestion: rule.suggestion,
-                    quickFix: rule.buildQuickFix?.(line, match),
-                    documentationUrl: rule.documentationUrl,
-                    confidence: rule.confidence,
-                });
-            }
+            //     const column = line.search(/\S/);
+            //     results.push({
+            //         id: `${rule.id}:${i}`,
+            //         category: rule.category,
+            //         line: i,
+            //         column: column < 0 ? 0 : column,
+            //         endColumn: column + (match[0]?.length ?? 10),
+            //         severity: rule.severity,
+            //         message: rule.message,
+            //         suggestion: rule.suggestion,
+            //         quickFix: rule.buildQuickFix?.(line, match),
+            //         documentationUrl: rule.documentationUrl,
+            //         confidence: rule.confidence,
+            //     });
+            // }
         }
 
         return results;

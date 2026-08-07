@@ -8,29 +8,29 @@ export class LearningDashboard {
         this.learningEngine = learningEngine;
     }
 
-   showDashboard(): void {
-    const panel = vscode.window.createWebviewPanel(
-        'learningDashboard',
-        'Dart AI - Learning Dashboard',
-        vscode.ViewColumn.Beside,
-        { enableScripts: true }
-    );
+    showDashboard(): void {
+        const panel = vscode.window.createWebviewPanel(
+            'learningDashboard',
+            'Dart AI - Learning Dashboard',
+            vscode.ViewColumn.Beside,
+            { enableScripts: true }
+        );
 
-    const refresh = () => {
-        const stats = this.learningEngine.getStatistics();
-        panel.webview.html = this.generateDashboardHTML(stats);
-    };
+        const refresh = () => {
+            const stats = this.learningEngine.getStatistics();
+            panel.webview.html = this.generateDashboardHTML(stats);
+        };
 
-    refresh(); // Initial load
+        refresh(); // Initial load
 
-    // Auto-refresh every 5 seconds while panel is open
-    const interval = setInterval(refresh, 5000);
+        // Auto-refresh every 5 seconds while panel is open
+        const interval = setInterval(refresh, 5000);
 
-    // Stop refreshing when panel closes (prevents memory leak)
-    panel.onDidDispose(() => {
-        clearInterval(interval);
-    });
-}
+        // Stop refreshing when panel closes (prevents memory leak)
+        panel.onDidDispose(() => {
+            clearInterval(interval);
+        });
+    }
     private generateDashboardHTML(stats: any): string {
         const {
             totalPatterns,
@@ -408,7 +408,7 @@ export class LearningDashboard {
             <div class="stat-subtext">unique patterns learned</div>
         </div>
         <div class="stat-card">
-            <h3>🔧 Fixes Recorded</h3>
+            <h3>🛠 Fixes Recorded</h3>
             <div class="stat-value">${totalFixes}</div>
             <div class="stat-subtext">error fixes learned</div>
         </div>
@@ -466,7 +466,7 @@ export class LearningDashboard {
     </div>
 
     <div class="section">
-        <h2>💡 How Learning Works</h2>
+        <h2>✅ How Learning Works</h2>
         <div class="section-content">
             <div style="color: var(--vscode-foreground); line-height: 1.8;">
                 <p><strong>Knowledge</strong> (Built-in, for everyone):</p>

@@ -150,7 +150,7 @@ export class LearningNotifications {
     showSuggestedPatternNotification(pattern: string): void {
         try {
             vscode.window.showInformationMessage(
-                `💡 Suggestion: Based on your patterns, try this: ${pattern}`
+                `✅ Suggestion: Based on your patterns, try this: ${pattern}`
             );
         } catch (error) {
             console.warn('Error showing suggestion notification:', error);

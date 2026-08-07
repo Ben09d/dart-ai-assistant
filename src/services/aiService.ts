@@ -25,6 +25,7 @@ export interface Refactoring {
     description: string;
     code: string;
     confidence: number;
+    rationale: string;
 }
 
 export interface AIRequestOptions {
@@ -417,7 +418,7 @@ export class AIService {
                         error.line, lineText.length
                     ),
                     newText: fix.trimEnd(),
-                    description: `A-I-0 Fix: ${error.message}`,
+                    description: `Dart AI Fix: ${error.message}`,
                     confidence: 0.8,
                 });
             }
@@ -427,21 +428,12 @@ export class AIService {
     }
 
 
-    async optimizeCode(code: string, selection: vscode.Selection): Promise<string> {
-        const prompt = `Optimize the following Dart code for better performance, readability, and best practices. 
-Return only the optimized code without explanations:
-
-${code}`;
-
-        return await this.callAI(prompt);
+    async optimizeCode(code: string, signal?: AbortSignal): Promise<string> {
+        return this.call(code, { taskType: 'optimize', maxTokens: 1500, signal });
     }
 
-    async explainCode(code: string): Promise<string> {
-        const prompt = `Explain the following Dart code in detail, including what it does, how it works, and any important patterns or concepts used:
-
-${code}`;
-
-        return await this.callAI(prompt);
+    async explainCode(code: string, signal?: AbortSignal): Promise<string> {
+        return this.call(code, { taskType: 'explain', maxTokens: 600, signal });
     }
 
     async generateTests(code: string): Promise<string> {
@@ -454,29 +446,14 @@ Generate complete test file with imports.`;
         return await this.callAI(prompt);
     }
 
-    async suggestRefactorings(code: string): Promise<Refactoring[]> {
-        const prompt = `Suggest 3-5 different refactoring options for the following Dart code. For each suggestion, provide:
-1. A brief description
-2. The refactored code
-3. Confidence level (0-100)
-
-Format as JSON array with keys: description, code, confidence
-
-Code to refactor:
-${code}`;
-
-        const response = await this.callAI(prompt);
-
-        try {
-            return JSON.parse(response);
-        } catch {
-            // Fallback if JSON parsing fails
-            return [{
-                description: "Extract method",
-                code: code,
-                confidence: 70
-            }];
-        }
+    async suggestRefactorings(code: string, signal?: AbortSignal): Promise<Refactoring[]> {
+        const raw = await this.call(code, { taskType: 'refactor', maxTokens: 2000, signal });
+        return this._parseJSON<Refactoring[]>(raw, [{
+            description: 'Extract method',
+            code,
+            confidence: 50,
+            rationale: 'Could not parse AI response.',
+        }]);
     }
 
     async completeCode(document: vscode.TextDocument, position: vscode.Position): Promise<string> {
@@ -491,23 +468,32 @@ ${textBeforeCursor}`;
         return await this.callAI(prompt);
     }
 
-    async generateCompletion(
+    async documentCode(code: string, signal?: AbortSignal): Promise<string> {
+        return this.call(code, { taskType: 'document', maxTokens: 2000, signal });
+    }
+
+    async generateWidget(description: string, signal?: AbortSignal): Promise<string> {
+        return this.call(description, { taskType: 'widget', maxTokens: 1500, signal });
+    }
+
+    async reviewCode(code: string, signal?: AbortSignal): Promise<Array<{
+        severity: string; category: string; message: string; line: number | null;
+    }>> {
+        const raw = await this.call(code, { taskType: 'review', maxTokens: 1500, signal });
+        return this._parseJSON(raw, []);
+    }
+
+
+    async generateCompletions(
         prefix: string,
         suffix: string,
-        currentWord: string
+        signal?: AbortSignal
     ): Promise<string[]> {
-        const prompt = `Given this Dart code context, suggest 3-5 intelligent completions for "${currentWord}".
-Return only completion suggestions, one per line.
-
-Code before:
-${prefix}
-
-Code after:
-${suffix}`;
-
-        const response = await this.callAI(prompt);
-        return response.split('\n').filter(s => s.trim());
+        const payload = `[PREFIX]\n${prefix}\n[SUFFIX]\n${suffix}`;
+        const result = await this.call(payload, { taskType: 'completion', maxTokens: 300, signal });
+        return result.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 5);
     }
+
 
     private async requestAIFix(
         line: string,
@@ -868,6 +854,15 @@ void main() {
     });
   });
 }`;
+    }
+
+    private _parseJSON<T>(raw: string, fallback: T): T {
+        try {
+            const cleaned = raw.replace(/```(?:json)?/g, '').trim();
+            return JSON.parse(cleaned) as T;
+        } catch {
+            return fallback;
+        }
     }
 
     private smartCompletion(prompt: string): string {

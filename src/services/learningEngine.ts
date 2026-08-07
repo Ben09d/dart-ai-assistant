@@ -2,15 +2,36 @@ import * as vscode from 'vscode';
 
 declare const console: {
     warn(message?: any, ...optionalParams: any[]): void;
+    error(message?: any, ...optionalParams: any[]): void;
+
 };
-const DECAY_HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
+
 interface CodingPattern {
+    id: string;
     pattern: string;
     frequency: number;
     context: string;
     lastUsed: Date;
+    /** Exponentially-weighted score that decays over time */
+    score: number;
+    /** Which file types this pattern was seen in */
+    fileTypes: Set<string>;
     /** Tags derived from analysis (e.g. "async", "widget", "state") */
     tags: Set<string>;
+}
+
+
+interface PatternCluster {
+    centroid: string;
+    members: string[];
+    label: string;
+}
+
+interface SessionStats {
+    editsThisSession: number;
+    errorsFixed: number;
+    patternsLearned: number;
+    sessionStart: number;
 }
 
 interface UserPreference {
@@ -43,6 +64,97 @@ interface FixRecord {
     vector: number[];
 }
 
+/** Tracks adoption of a specific best-practice over time. */
+interface BestPracticeAdoption {
+    practice: string;
+    timesFollowed: number;
+    timesViolated: number;
+    lastSeen: Date;
+    adoptionRate: number;
+}
+
+/** A single snapshot of session stats, kept for trend analysis across sessions. */
+interface SessionSnapshot {
+    sessionStart: number;
+    sessionEnd: number;
+    editsThisSession: number;
+    errorsFixed: number;
+    patternsLearned: number;
+}
+
+/** Uganda/Flutter-specific signal extracted from the user's code. */
+interface LocalMarketSignal {
+    signal: string;
+    category: 'mobile_money' | 'currency' | 'phone_validation' | 'offline_pattern' | 'localization';
+    frequency: number;
+    lastUsed: Date;
+}
+
+
+/** Aggregated productivity trend across the last N sessions. */
+interface ProductivityTrend {
+    averageEditsPerSession: number;
+    averageErrorsFixedPerSession: number;
+    averagePatternsLearnedPerSession: number;
+    sessionsAnalyzed: number;
+    trendDirection: 'improving' | 'stable' | 'declining';
+}
+
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const DECAY_HALF_LIFE_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
+const MAX_FIX_HISTORY = 200;
+const MAX_PATTERNS = 2000;
+const MAX_PREF_ITEMS = 100;
+const SIMILARITY_THRESHOLD = 0.65;
+const MAX_SESSION_HISTORY = 50;
+
+
+// Best-practice rules tracked for adoption-rate analytics
+const BEST_PRACTICE_CHECKS: Record<string, { followed: RegExp; violated: RegExp }> = {
+    const_constructors: {
+        followed: /\bconst\s+(?:Text|Icon|SizedBox|Padding|EdgeInsets)\s*\(/,
+        violated: /(?<!const\s)\b(?:Text|Icon|SizedBox|Padding)\s*\(\s*['"\d]/,
+    },
+    mounted_guard: {
+        followed: /if\s*\(\s*mounted\s*\)\s*\{[^}]*setState/,
+        violated: /await[^;]+;[^}]*setState\s*\((?!\s*\(\s*\)\s*=>\s*\{\s*\}\s*\))[^}]*\)(?![^]*mounted)/,
+    },
+    null_aware_access: {
+        followed: /\w+\?\.\w+/,
+        violated: /\w+!\.\w+/,
+    },
+    secure_storage: {
+        followed: /flutter_secure_storage/,
+        violated: /SharedPreferences[^;]*(?:token|password|secret)/i,
+    },
+    debug_print: {
+        followed: /\bdebugPrint\s*\(/,
+        violated: /(?<!debug)\bprint\s*\(/,
+    },
+};
+
+// Uganda / local-market detection patterns
+const LOCAL_MARKET_PATTERNS: Record<LocalMarketSignal['category'], RegExp> = {
+    mobile_money: /MTN|Airtel|MobileMoney|partyIdType|MSISDN/i,
+    currency: /UGX|NumberFormat\.currency|formatUGX/,
+    phone_validation: /\+256|0(?:7[0-8]|3[09])\d{7}/,
+    offline_pattern: /\bHive\b|connectivity_plus|ConnectivityResult/,
+    localization: /Intl\.|flutter_localizations|AppLocalizations/,
+};
+
+// Common Dart / Flutter error categories for smarter bucketing
+const ERROR_CATEGORIES: Record<string, RegExp> = {
+    type_mismatch: /type '([^']+)' is not a subtype of type '([^']+)'/,
+    undefined_method: /The method '([^']+)' isn't defined/,
+    undefined_getter: /The getter '([^']+)' isn't defined/,
+    missing_import: /Undefined name '([^']+)'/,
+    null_safety: /Null check operator used on a null value/,
+    widget_build: /The return type '([^']+)' isn't a '([^']+)'/,
+};
+
+
 function decayedScore(frequency: number, lastUsed: Date): number {
     const ageMs = Date.now() - lastUsed.getTime();
     const lambda = Math.LN2 / DECAY_HALF_LIFE_MS;
@@ -58,11 +170,48 @@ function tokenize(text: string): string[] {
 }
 
 
+function buildVector(tokens: string[], vocab: string[]): number[] {
+    const counts = new Map<string, number>();
+    for (const t of tokens) counts.set(t, (counts.get(t) ?? 0) + 1);
+    const vec = vocab.map(v => counts.get(v) ?? 0);
+    const norm = Math.sqrt(vec.reduce((s, x) => s + x * x, 0)) || 1;
+    return vec.map(x => x / norm);
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0;
+    let dot = 0;
+    for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+    return dot; // vectors are pre-normalised
+}
+
+
+function categoriseError(message: string): string {
+    for (const [cat, re] of Object.entries(ERROR_CATEGORIES)) {
+        if (re.test(message)) return cat;
+    }
+    return 'general';
+}
+
+// ─── Main class ───────────────────────────────────────────────────────────────
+
+
+
 export class LearningEngine {
     private context: vscode.ExtensionContext;
     private patterns: Map<string, CodingPattern>;
     private preferences: UserPreference;
     private fixHistory: FixRecord[];
+    private clusters: PatternCluster[];
+    private vocab: string[];          // shared vocabulary for vector embeddings
+    private session: SessionStats;
+    private bestPractices: Map<string, BestPracticeAdoption>;
+    private localMarketSignals: Map<string, LocalMarketSignal>;
+    private sessionHistory: SessionSnapshot[];
+
+    // Throttle heavy work
+    private dirtyPatterns = false;
+    private saveTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -73,36 +222,257 @@ export class LearningEngine {
             imports: []
         };
         this.fixHistory = [];
+
+
+        this.clusters = [];
+        this.vocab = [];
+        this.bestPractices = new Map();
+        this.localMarketSignals = new Map();
+        this.sessionHistory = [];
+        this.session = {
+            editsThisSession: 0,
+            errorsFixed: 0,
+            patternsLearned: 0,
+            sessionStart: Date.now(),
+        };
         this.loadLearningData();
     }
 
+    // ── Persistence ────────────────────────────────────────────────────────────
+
     private loadLearningData() {
         try {
-            const savedPatterns = this.context.globalState.get<any>('codingPatterns');
-            const savedPreferences = this.context.globalState.get<UserPreference>('userPreferences');
-            const savedHistory = this.context.globalState.get<FixRecord[]>('fixHistory');
+            const rawPatterns = this.context.globalState.get<Record<string, any>>('codingPatterns');
+            const rawPrefs = this.context.globalState.get<UserPreference>('userPreferences');
+            const rawHistory = this.context.globalState.get<FixRecord[]>('fixHistory');
+            const rawVocab = this.context.globalState.get<string[]>('vocab');
+            const rawClusters = this.context.globalState.get<PatternCluster[]>('clusters');
+            const rawBestPractices = this.context.globalState.get<Record<string, any>>('bestPractices');
+            const rawLocalSignals = this.context.globalState.get<Record<string, any>>('localMarketSignals');
+            const rawSessionHistory = this.context.globalState.get<SessionSnapshot[]>('sessionHistory');
 
-            if (savedPatterns && typeof savedPatterns === 'object') {
-                try {
-                    this.patterns = new Map(Object.entries(savedPatterns));
-                } catch (error) {
-                    console.warn('Failed to load patterns:', error);
-                    this.patterns = new Map();
-                }
+
+            if (rawPatterns) {
+                this.patterns = new Map(
+                    Object.entries(rawPatterns).map(([k, v]) => [
+                        k,
+                        {
+                            ...v,
+                            lastUsed: new Date(v.lastUsed),
+                            fileTypes: new Set<string>(v.fileTypes ?? []),
+                            tags: new Set<string>(v.tags ?? []),
+                        } as CodingPattern,
+                    ])
+                );
             }
 
-            if (savedPreferences && typeof savedPreferences === 'object') {
-                this.preferences = savedPreferences;
+            if (rawPrefs) this.preferences = rawPrefs;
+            if (rawHistory) this.fixHistory = rawHistory;
+            if (rawVocab) this.vocab = rawVocab;
+            if (rawClusters) this.clusters = rawClusters;
+            if (rawBestPractices) {
+                this.bestPractices = new Map(
+                    Object.entries(rawBestPractices).map(([k, v]) => [
+                        k,
+                        { ...v, lastSeen: new Date(v.lastSeen) } as BestPracticeAdoption,
+                    ])
+                );
             }
-
-            if (Array.isArray(savedHistory)) {
-                this.fixHistory = savedHistory;
+            if (rawLocalSignals) {
+                this.localMarketSignals = new Map(
+                    Object.entries(rawLocalSignals).map(([k, v]) => [
+                        k,
+                        { ...v, lastUsed: new Date(v.lastUsed) } as LocalMarketSignal,
+                    ])
+                );
             }
-        } catch (error) {
-            console.warn('Error loading learning data:', error);
-            // Continue with defaults
+            if (rawSessionHistory) this.sessionHistory = rawSessionHistory;
+        } catch (e) {
+            // Corrupted state — start fresh
+            console.error('[LearningEngine || AdvancedLearningEngine] Failed to load state, resetting.', e);
         }
     }
+
+
+    /** Debounced save: batches rapid writes into a single disk operation. */
+    private scheduleSave(): void {
+        this.dirtyPatterns = true;
+        if (this.saveTimer) return;
+        this.saveTimer = setTimeout(() => {
+            this.saveTimer = null;
+            if (this.dirtyPatterns) void this.persistLearningData();
+        }, 2000);
+    }
+
+    private async persistLearningData(): Promise<void> {
+        this.dirtyPatterns = false;
+
+        // Serialize Sets to arrays for JSON storage
+        const serialisedPatterns: Record<string, any> = {};
+        for (const [k, v] of this.patterns) {
+            serialisedPatterns[k] = {
+                ...v,
+                lastUsed: v.lastUsed.toISOString(),
+                fileTypes: Array.from(v.fileTypes),
+                tags: Array.from(v.tags),
+            };
+        }
+
+        await Promise.all([
+            this.context.globalState.update('codingPatterns', serialisedPatterns),
+            this.context.globalState.update('userPreferences', this.preferences),
+            this.context.globalState.update('fixHistory', this.fixHistory),
+            this.context.globalState.update('vocab', this.vocab),
+            this.context.globalState.update('clusters', this.clusters),
+            this.context.globalState.update('bestPractices', this._serialiseBestPractices()),
+            this.context.globalState.update('localMarketSignals', this._serialiseLocalSignals()),
+            this.context.globalState.update('sessionHistory', this.sessionHistory),
+        ]);
+    }
+
+    /** Serialises bestPractices Map (with Date) into a plain object for globalState storage. */
+    private _serialiseBestPractices(): Record<string, any> {
+        const out: Record<string, any> = {};
+        for (const [k, v] of this.bestPractices) {
+            out[k] = { ...v, lastSeen: v.lastSeen.toISOString() };
+        }
+        return out;
+    }
+
+    /** Serialises localMarketSignals Map (with Date) into a plain object for globalState storage. */
+    private _serialiseLocalSignals(): Record<string, any> {
+        const out: Record<string, any> = {};
+        for (const [k, v] of this.localMarketSignals) {
+            out[k] = { ...v, lastUsed: v.lastUsed.toISOString() };
+        }
+        return out;
+    }
+
+    // ── Real-time edit learning ────────────────────────────────────────────────
+
+    recordEdit(event: vscode.TextDocumentChangeEvent): void {
+        const ext = event.document.fileName.split('.').pop() ?? 'unknown';
+
+        for (const change of event.contentChanges) {
+            const text = change.text;
+            if (!text.trim()) continue; // ignore whitespace-only changes
+
+            this.learnNamingConvention(text);
+            this.learnStructurePattern(text);
+            this.learnImportPattern(text);
+            this.learnWidgetPattern(text, ext);
+            this.session.editsThisSession++;
+        }
+
+        this.scheduleSave();
+    }
+
+    // ── Deep document analysis ────────────────────────────────────────────────
+
+    async analyzeDocument(document: vscode.TextDocument): Promise<void> {
+        const text = document.getText();
+        const lines = text.split('\n');
+        const ext = document.fileName.split('.').pop() ?? 'unknown';
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            const ctx = this.getContext(lines, i);
+
+            // Structural patterns
+            if (/\bclass\s+\w+/.test(line)) this.upsertPattern('class_structure', line, ctx, ext, ['oop']);
+            if (/\bFuture[<(]/.test(line)) this.upsertPattern('async_future', line, ctx, ext, ['async']);
+            if (/\bStream[<(]/.test(line)) this.upsertPattern('stream_pattern', line, ctx, ext, ['async', 'reactive']);
+            if (/\bsetState\s*\(/.test(line)) this.upsertPattern('stateful_widget', line, ctx, ext, ['state', 'widget']);
+            if (/\bProvider\.of\b/.test(line)) this.upsertPattern('provider_pattern', line, ctx, ext, ['state', 'di']);
+            if (/\bBlocBuilder\b/.test(line)) this.upsertPattern('bloc_builder', line, ctx, ext, ['state', 'bloc']);
+            if (/\briverpod\b/i.test(line)) this.upsertPattern('riverpod_pattern', line, ctx, ext, ['state', 'riverpod']);
+            if (/\bextends\s+StatelessWidget/.test(line)) this.upsertPattern('stateless_widget', line, ctx, ext, ['widget']);
+            if (/\bextends\s+StatefulWidget/.test(line)) this.upsertPattern('stateful_widget_def', line, ctx, ext, ['widget', 'state']);
+            if (/\bfactory\s+\w+/.test(line)) this.upsertPattern('factory_constructor', line, ctx, ext, ['pattern']);
+            if (/\bconst\s+\w+\s*=\s*\[/.test(line)) this.upsertPattern('const_list', line, ctx, ext, ['const']);
+        }
+
+        // Prune low-value patterns when we exceed the cap
+        this.prunePatterns();
+
+        // Rebuild clusters periodically (every ~50 document analyses)
+        if (Math.random() < 0.02) await this.rebuildClusters();
+
+        // Track best-practice adoption and Uganda/local-market signals across the whole file
+        this.trackBestPractices(text);
+        this.trackLocalMarketSignals(text);
+
+        this.scheduleSave();
+    }
+
+
+    // ── Best-practice adoption tracking ───────────────────────────────────────
+
+    /**
+     * Scans the document text against known best-practice rules and updates
+     * the adoption-rate ledger. Call this from analyzeDocument or on save.
+     */
+    trackBestPractices(text: string): void {
+        for (const [practice, rule] of Object.entries(BEST_PRACTICE_CHECKS)) {
+            const followedCount = (text.match(rule.followed) ?? []).length;
+            const violatedCount = (text.match(rule.violated) ?? []).length;
+            if (followedCount === 0 && violatedCount === 0) continue;
+
+            const existing = this.bestPractices.get(practice);
+            if (existing) {
+                existing.timesFollowed += followedCount;
+                existing.timesViolated += violatedCount;
+                existing.lastSeen = new Date();
+                const total = existing.timesFollowed + existing.timesViolated;
+                existing.adoptionRate = total > 0 ? existing.timesFollowed / total : 0;
+            } else {
+                const total = followedCount + violatedCount;
+                this.bestPractices.set(practice, {
+                    practice,
+                    timesFollowed: followedCount,
+                    timesViolated: violatedCount,
+                    lastSeen: new Date(),
+                    adoptionRate: total > 0 ? followedCount / total : 0,
+                });
+            }
+        }
+    }
+
+    /** Returns the adoption-rate ledger sorted by lowest adoption first (areas needing attention). */
+    getBestPracticeReport(): BestPracticeAdoption[] {
+        return Array.from(this.bestPractices.values())
+            .sort((a, b) => a.adoptionRate - b.adoptionRate);
+    }
+
+    // ── Local market (Uganda) signal tracking ─────────────────────────────────
+
+    /**
+     * Detects Uganda/Flutter-specific market signals (Mobile Money, UGX, +256
+     * phone numbers, offline-first patterns, localization) in the document text.
+     */
+    trackLocalMarketSignals(text: string): void {
+        for (const [category, regex] of Object.entries(LOCAL_MARKET_PATTERNS) as [LocalMarketSignal['category'], RegExp][]) {
+            const matches = text.match(regex);
+            if (!matches) continue;
+
+            const key = category;
+            const existing = this.localMarketSignals.get(key);
+            if (existing) {
+                existing.frequency += matches.length;
+                existing.lastUsed = new Date();
+            } else {
+                this.localMarketSignals.set(key, {
+                    signal: matches[0],
+                    category,
+                    frequency: matches.length,
+                    lastUsed: new Date(),
+                });
+            }
+        }
+    }
+
 
     private async saveLearningData() {
         try {
@@ -114,6 +484,76 @@ export class LearningEngine {
             // Don't throw - just log and continue
         }
     }
+
+
+    // ── Clustering ────────────────────────────────────────────────────────────
+
+    /**
+     * Groups patterns into clusters via greedy token-overlap.
+     * A lightweight substitute for k-means that runs in O(n²).
+     */
+    private async rebuildClusters(): Promise<void> {
+        const entries = Array.from(this.patterns.values())
+            .filter(p => p.frequency >= 2)
+            .slice(0, 500); // cap for performance
+
+        const clusters: PatternCluster[] = [];
+        const assigned = new Set<string>();
+
+        for (const entry of entries) {
+            if (assigned.has(entry.pattern)) continue;
+
+            const cluster: PatternCluster = {
+                centroid: entry.pattern,
+                members: [entry.pattern],
+                label: Array.from(entry.tags)[0] ?? 'general',
+            };
+            assigned.add(entry.pattern);
+
+            for (const other of entries) {
+                if (assigned.has(other.pattern)) continue;
+                if (this.tokenOverlap(entry.pattern, other.pattern) > 0.4) {
+                    cluster.members.push(other.pattern);
+                    assigned.add(other.pattern);
+                }
+            }
+
+            clusters.push(cluster);
+        }
+
+        this.clusters = clusters;
+    }
+
+
+    private tokenOverlap(a: string, b: string): number {
+        const sa = new Set(tokenize(a));
+        const sb = new Set(tokenize(b));
+        let common = 0;
+        for (const t of sa) if (sb.has(t)) common++;
+        return (2 * common) / (sa.size + sb.size || 1);
+    }
+
+    // ── Private learning helpers ──────────────────────────────────────────────
+
+    private learnNamingConvention(text: string): void {
+        const varPattern = /\b(?:var|final|const|late)\s+(?:\w+\s+)?([a-zA-Z_]\w*)\s*(?:=|;)/g;
+        for (const match of text.matchAll(varPattern)) {
+            const name = match[1];
+            if (this.isCamelCase(name)) this.appendPref('naming', 'camelCase');
+            else if (this.isSnakeCase(name)) this.appendPref('naming', 'snake_case');
+            else if (this.isPascalCase(name)) this.appendPref('naming', 'PascalCase');
+        }
+    }
+
+
+    private learnImportPattern(text: string): void {
+        for (const match of text.matchAll(/import\s+['"]([^'"]+)['"]/g)) {
+            this.appendPref('imports', match[1]);
+        }
+    }
+
+
+
 
 
     /**
@@ -202,29 +642,6 @@ export class LearningEngine {
     }
 
 
-    recordEdit(event: vscode.TextDocumentChangeEvent) {
-        try {
-            for (const change of event.contentChanges) {
-                try {
-                    const text = change.text;
-
-                    // Learn from variable naming
-                    this.learnNamingConvention(text);
-
-                    // Learn from code structure
-                    this.learnStructurePattern(text);
-
-                    // Learn from imports
-                    this.learnImportPattern(text);
-                } catch (error) {
-                    console.warn('Error recording single edit:', error);
-                }
-            }
-        } catch (error) {
-            console.warn('Error in recordEdit:', error);
-        }
-    }
-
     async analyzePatterns(document: vscode.TextDocument) {
         try {
             const text = document.getText();
@@ -236,15 +653,15 @@ export class LearningEngine {
                     const line = lines[i];
 
                     if (line.includes('class ')) {
-                        this.recordPattern('class_structure', line, this.getContext(lines, i));
+                        this.recordPattern('class_structure', line, text, this.getContext(lines, i));
                     }
 
                     if (line.includes('Future<')) {
-                        this.recordPattern('async_pattern', line, this.getContext(lines, i));
+                        this.recordPattern('async_pattern', line, text, this.getContext(lines, i));
                     }
 
                     if (line.includes('setState(')) {
-                        this.recordPattern('state_management', line, this.getContext(lines, i));
+                        this.recordPattern('state_management', line, text, this.getContext(lines, i));
                     }
                 } catch (error) {
                     console.warn('Error analyzing line:', error);
@@ -296,14 +713,15 @@ export class LearningEngine {
         return null;
     }
 
-    getPreferredPattern(type: string): string[] {
-        const patterns = Array.from(this.patterns.values())
-            .filter(p => p.pattern.includes(type))
-            .sort((a, b) => b.frequency - a.frequency)
-            .slice(0, 5)
-            .map(p => p.pattern);
-
-        return patterns;
+    getPreferredPattern(type: string, tag?: string, limit = 5): CodingPattern[] {
+        return Array.from(this.patterns.values())
+            .filter(p =>
+                p.pattern.toLowerCase().includes(type.toLowerCase()) &&
+                (!tag || p.tags.has(tag))
+            )
+            .map(p => ({ ...p, score: decayedScore(p.frequency, p.lastUsed) }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, limit);
     }
 
     getCompletionSuggestions(prefix: string): string[] {
@@ -326,98 +744,104 @@ export class LearningEngine {
         return suggestions.slice(0, 10);
     }
 
-    private learnNamingConvention(text: string) {
-        try {
-            // Extract variable names
-            const variablePattern = /\b(var|final|const)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=/g;
-            const matches = text.matchAll(variablePattern);
-
-            for (const match of matches) {
-                try {
-                    const varName = match[2];
-
-                    // Analyze naming style
-                    if (this.isCamelCase(varName)) {
-                        this.preferences.naming.push('camelCase');
-                    } else if (this.isSnakeCase(varName)) {
-                        this.preferences.naming.push('snake_case');
-                    }
-                } catch (error) {
-                    console.warn('Error learning naming convention:', error);
-                }
-            }
-
-            // Keep only recent preferences
-            if (this.preferences.naming.length > 50) {
-                this.preferences.naming = this.preferences.naming.slice(-50);
-            }
-        } catch (error) {
-            console.warn('Error in learnNamingConvention:', error);
-        }
-    }
-
     private learnStructurePattern(text: string) {
-        if (text.includes('class ') && text.includes('extends')) {
-            this.preferences.structure.push('inheritance');
-        }
+        if (/\bextends\b/.test(text)) this.appendPref('structure', 'inheritance');
+        if (/\bmixin\b/.test(text)) this.appendPref('structure', 'mixins');
+        if (/\bfactory\b/.test(text)) this.appendPref('structure', 'factory_pattern');
+        if (/\bimplements\b/.test(text)) this.appendPref('structure', 'interface');
+        if (/\bwith\s+\w/.test(text)) this.appendPref('structure', 'mixin_application');
+        if (/=>\s/.test(text)) this.appendPref('structure', 'arrow_function');
+        if (/\basync\s*\*/.test(text)) this.appendPref('structure', 'async_generator');
+    }
 
-        if (text.includes('mixin ')) {
-            this.preferences.structure.push('mixins');
-        }
+    private learnWidgetPattern(text: string, ext: string): void {
+        if (ext !== 'dart') return;
+        if (/\bColumn\s*\(/.test(text)) this.upsertPattern('widget_column', text, '', ext, ['widget', 'layout']);
+        if (/\bRow\s*\(/.test(text)) this.upsertPattern('widget_row', text, '', ext, ['widget', 'layout']);
+        if (/\bStack\s*\(/.test(text)) this.upsertPattern('widget_stack', text, '', ext, ['widget', 'layout']);
+        if (/\bScaffold\s*\(/.test(text)) this.upsertPattern('widget_scaffold', text, '', ext, ['widget']);
+    }
 
-        if (text.includes('factory ')) {
-            this.preferences.structure.push('factory_pattern');
-        }
+    private upsertPattern(type: string, pattern: string, context: string, fileType: string, tags: string[]): void {
+        const key = `${type}:${pattern}`;
 
-        if (this.preferences.structure.length > 50) {
-            this.preferences.structure = this.preferences.structure.slice(-50);
+        if (this.patterns.has(key)) {
+            const p = this.patterns.get(key)!;
+            p.frequency++;
+            p.lastUsed = new Date();
+            p.score = decayedScore(p.frequency, p.lastUsed);
+            p.fileTypes.add(fileType);
+            for (const t of tags) p.tags.add(t);
+        } else {
+            this.patterns.set(key, {
+                id: key,
+                pattern,
+                frequency: 1,
+                context,
+                lastUsed: new Date(),
+                score: 1,
+                fileTypes: new Set([fileType]),
+                tags: new Set(tags),
+            });
+            this.session.patternsLearned++;
         }
     }
 
-    private learnImportPattern(text: string) {
-        const importPattern = /import\s+['"]([^'"]+)['"]/g;
-        const matches = text.matchAll(importPattern);
 
-        for (const match of matches) {
-            this.preferences.imports.push(match[1]);
-        }
+    /** Evict the lowest-scoring patterns when the map grows too large. */
+    private prunePatterns(): void {
+        if (this.patterns.size <= MAX_PATTERNS) return;
 
-        if (this.preferences.imports.length > 50) {
-            this.preferences.imports = this.preferences.imports.slice(-50);
+        const sorted = Array.from(this.patterns.entries())
+            .map(([k, v]) => ({ k, score: decayedScore(v.frequency, v.lastUsed) }))
+            .sort((a, b) => a.score - b.score);
+
+        const toRemove = sorted.slice(0, this.patterns.size - MAX_PATTERNS);
+        for (const { k } of toRemove) this.patterns.delete(k);
+    }
+
+    private appendPref<K extends keyof UserPreference>(key: K, value: string): void {
+        (this.preferences[key] as string[]).push(value);
+        if ((this.preferences[key] as string[]).length > MAX_PREF_ITEMS) {
+            (this.preferences[key] as string[]).splice(0, 1);
         }
     }
 
-    private recordPattern(type: string, pattern: string, context: string) {
+
+    private recordPattern(type: string, pattern: string, fileType: string, context: string) {
         const key = `${type}:${pattern}`;
 
         if (this.patterns.has(key)) {
             const existing = this.patterns.get(key)!;
             existing.frequency++;
             existing.lastUsed = new Date();
+            existing.fileTypes.add(fileType);
         } else {
             this.patterns.set(key, {
+                id: key,
                 pattern,
                 frequency: 1,
                 context,
                 lastUsed: new Date(),
+                score: 1,
+                fileTypes: new Set([fileType]),
                 tags: new Set,
             });
         }
     }
 
     private getContext(lines: string[], index: number): string {
-        const start = Math.max(0, index - 2);
-        const end = Math.min(lines.length, index + 3);
-        return lines.slice(start, end).join('\n');
+        return lines.slice(Math.max(0, index - 2), Math.min(lines.length, index + 3)).join('\n');
     }
 
     private isCamelCase(str: string): boolean {
-        return /^[a-z][a-zA-Z0-9]*$/.test(str);
+        return /^[a-z][a-zA-Z0-9]*$/.test(str) && /[A-Z]/.test(str);
     }
 
     private isSnakeCase(str: string): boolean {
-        return /^[a-z][a-z0-9_]*$/.test(str);
+        return /^[a-z][a-z0-9_]*_[a-z0-9_]*$/.test(str);
     }
+    private isPascalCase(str: string) { return /^[A-Z][a-zA-Z0-9]*$/.test(str); }
 
     private calculateSimilarity(str1: string, str2: string): number {
         const longer = str1.length > str2.length ? str1 : str2;
@@ -495,10 +919,10 @@ export class LearningEngine {
         return most;
     }
 
-      /**
-     * Detect anomalous patterns that deviate from user's coding norms.
-     * Uses statistical methods (z-score, isolation) to flag suspicious patterns.
-     */
+    /**
+   * Detect anomalous patterns that deviate from user's coding norms.
+   * Uses statistical methods (z-score, isolation) to flag suspicious patterns.
+   */
     detectAnomalies(): AnomalyScore[] {
         const allPatterns = Array.from(this.patterns.values());
         if (allPatterns.length < 5) return [];

@@ -47,7 +47,7 @@ export class PredictiveCompletionProvider implements vscode.CompletionItemProvid
                 const confidencePercent = Math.round(confidence);
 
                 item.label = `${prediction}`;
-                item.detail = `🔮 Predicted (${confidencePercent}% confidence)`;
+                item.detail = `🏹 Predicted (${confidencePercent}% confidence)`;
                 item.documentation = this.getDocumentation(prediction, index);
                 item.sortText = `00${index}`; // Show at top
                 item.preselect = index === 0; // Pre-select best prediction
@@ -199,7 +199,7 @@ export class PredictionStatusBar {
     updateStatus() {
         try {
             const stats = this.predictionEngine.getStatistics();
-            this.statusBar.text = `🚇 Predictions: ${stats.totalSequences}`;
+            this.statusBar.text = `🏹 Predictions: ${stats.totalSequences}`;
             this.statusBar.tooltip = `Code Predictions\nSequences: ${stats.totalSequences}\nFunction Patterns: ${stats.totalFunctionPatterns}\nBlock Patterns: ${stats.totalBlockPatterns}`;
             this.statusBar.show();
         } catch (error) {

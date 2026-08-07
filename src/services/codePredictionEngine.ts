@@ -25,7 +25,7 @@ export class CodePredictionEngine {
     private linePatterns: Map<string, string[]>;
     private functionPatterns: Map<string, string[]>;
     private blockPatterns: Map<string, string[]>;
-    private maxSequences: number = 300;
+    private maxSequences: number = 999999999999999999999999999999999999999;
     private minConfidence: number = 0.6;
 
     constructor(context: vscode.ExtensionContext) {
@@ -121,7 +121,7 @@ export class CodePredictionEngine {
     private recordFunctionPattern(currentLine: string, nextLine: string) {
         try {
             const funcKey = this.extractFunctionSignature(currentLine);
-            
+
             if (funcKey && nextLine) {
                 if (!this.functionPatterns.has(funcKey)) {
                     this.functionPatterns.set(funcKey, []);
@@ -138,7 +138,7 @@ export class CodePredictionEngine {
                 }
             }
         } catch (error) {
-            
+
             console.warn('Error recording function pattern:', error);
         }
     }
@@ -149,10 +149,10 @@ export class CodePredictionEngine {
     private recordBlockPattern(currentLine: string, nextLine: string) {
         try {
             const blockType = this.detectBlockType(currentLine);
-            
+
             if (blockType && nextLine) {
                 const key = `${blockType}:pattern`;
-                
+
                 if (!this.blockPatterns.has(key)) {
                     this.blockPatterns.set(key, []);
                 }
@@ -259,9 +259,9 @@ export class CodePredictionEngine {
             const document = editor.document;
             const position = editor.selection.active;
             const currentLine = document.lineAt(position.line);
-            
+
             // Get previous line for context
-            const prevLine = position.line > 0 
+            const prevLine = position.line > 0
                 ? document.lineAt(position.line - 1).text.trim()
                 : '';
 
@@ -408,7 +408,7 @@ export class CodePredictionEngine {
      * Helper: Check if line starts a block
      */
     private isBlockStart(line: string): boolean {
-        return /^(if|else|for|while|switch|try|catch|class|void|Future)/.test(line.trim());
+        return /^(if|else|for|case|while|switch|try|catch|class|void|Future|static|Column|Widget)/.test(line.trim());
     }
 
     /**
@@ -423,6 +423,12 @@ export class CodePredictionEngine {
         if (line.includes('catch ')) return 'catch';
         if (line.includes('class ')) return 'class';
         if (line.includes('void ')) return 'void';
+        if (line.includes('Future')) return 'Future';
+        if (line.includes('switch')) return 'switch';
+        if (line.includes('static')) return 'static';
+        if (line.includes('Widget')) return 'Widget';
+        if (line.includes('Column')) return 'Column';
+        if (line.includes('case')) return 'case';
         return 'block';
     }
 

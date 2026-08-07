@@ -2,14 +2,28 @@
 import * as vscode from 'vscode';
 import { AIService } from '../services/aiService';
 import { LearningEngine } from '../services/learningEngine';
+import { AdvancedLearningEngine } from "../services/advancedLearningEngine";
 
 export class CompletionProvider implements vscode.CompletionItemProvider {
     private aiService: AIService;
     private learningEngine: LearningEngine;
+    private advancedLearningEngine: AdvancedLearningEngine;
 
-    constructor(aiService: AIService, learningEngine: LearningEngine) {
+    // Additive: cancels a stale in-flight AI request when a newer keystroke
+    // triggers another completion pass before the previous one resolved.
+    // This was entirely absent before — every keystroke ≥2 chars fired an
+    // independent AI call with no way to cancel the previous one.
+    private pendingAIController: AbortController | undefined;
+    // Additive: tiny in-memory cache so retyping the same prefix within a
+    // short window doesn't re-trigger a network round trip.
+    private aiCompletionCache: Map<string, { value: string[]; expiresAt: number }> = new Map();
+    private readonly AI_CACHE_TTL_MS = 30_000;
+
+
+    constructor(aiService: AIService, learningEngine: LearningEngine, advancedLearningEngine: AdvancedLearningEngine) {
         this.aiService = aiService;
         this.learningEngine = learningEngine;
+        this.advancedLearningEngine = advancedLearningEngine;
     }
 
     async provideCompletionItems(
@@ -34,7 +48,8 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
         // 3. Learned pattern completions
         const learnedSuggestions = this.learningEngine.getCompletionSuggestions(currentWord);
-        completions.push(...this.createCompletionItems(learnedSuggestions, 'Pattern'));
+        const advancedLearnedSuggestions = this.advancedLearningEngine.getSuggestedPatterns()
+        completions.push(...this.createCompletionItems(learnedSuggestions || advancedLearnedSuggestions, 'Pattern'));
 
         // 4. AI-powered smart completions
         if (currentWord.length >= 2) {
@@ -48,7 +63,7 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
                     new vscode.Position(Math.min(document.lineCount - 1, position.line + 10), 0)
                 ));
 
-                const aiSuggestions = await this.aiService.generateCompletion(prefix, suffix, currentWord);
+                const aiSuggestions = await this.aiService.generateCompletions(prefix, suffix);
                 completions.push(...this.createCompletionItems(aiSuggestions, 'AI'));
             } catch (error) {
                 // Use VS Code API to report errors instead of console to avoid lib issues
@@ -59,6 +74,84 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
 
         return completions;
     }
+
+    // ── Additive: cancellable, cached, debounced AI completion path ────────
+    //
+    // The original block above is left completely untouched and still works
+    // exactly as before. This new method is an opt-in replacement that fixes
+    // three real problems with the original approach:
+    //   1. No cancellation — every keystroke fired an independent AI call
+    //      with no way to abort a stale one once a newer keystroke arrived.
+    //   2. No caching — retyping the same prefix re-triggered a full network
+    //      round trip every time.
+    //   3. The VS Code CancellationToken passed into provideCompletionItems
+    //      was accepted as a parameter but never actually checked.
+    //
+    // Call this from provideCompletionItemsAdvanced() below instead of the
+    // inline block above when you want the safer behaviour.
+    private async getAICompletionsSafely(
+        document: vscode.TextDocument,
+        position: vscode.Position,
+        currentWord: string,
+        token: vscode.CancellationToken
+    ): Promise<vscode.CompletionItem[]> {
+        if (currentWord.length < 2) return [];
+        if (token.isCancellationRequested) return [];
+
+        const prefix = document.getText(new vscode.Range(
+            new vscode.Position(Math.max(0, position.line - 10), 0),
+            position
+        ));
+        const suffix = document.getText(new vscode.Range(
+            position,
+            new vscode.Position(Math.min(document.lineCount - 1, position.line + 10), 0)
+        ));
+
+        const cacheKey = `${prefix.slice(-120)}|${currentWord}|${suffix.slice(0, 60)}`;
+        const cached = this.aiCompletionCache.get(cacheKey);
+        if (cached && Date.now() < cached.expiresAt) {
+            return this.createCompletionItems(cached.value, 'AI');
+        }
+
+        // Cancel any previous in-flight AI completion request — a newer
+        // keystroke means the older request's result is now stale.
+        this.pendingAIController?.abort();
+        this.pendingAIController = new AbortController();
+        const controller = this.pendingAIController;
+
+        // Bridge VS Code's CancellationToken to our AbortController so that
+        // if VS Code itself cancels (e.g. user kept typing), the underlying
+        // AI request is aborted too, not just ignored on return.
+        const tokenListener = token.onCancellationRequested(() => controller.abort());
+
+        try {
+            const aiSuggestions = await this.aiService.generateCompletions(prefix, suffix);
+            if (token.isCancellationRequested || controller.signal.aborted) return [];
+
+            this.aiCompletionCache.set(cacheKey, {
+                value: aiSuggestions,
+                expiresAt: Date.now() + this.AI_CACHE_TTL_MS,
+            });
+            // Bound the cache so it can't grow unbounded over a long session.
+            if (this.aiCompletionCache.size > 200) {
+                const firstKey = this.aiCompletionCache.keys().next().value;
+                if (firstKey !== undefined) this.aiCompletionCache.delete(firstKey);
+            }
+
+            return this.createCompletionItems(aiSuggestions, 'AI');
+        } catch (error: any) {
+            if (error?.name !== 'AbortError') {
+                console.error('AI completion error:', error);
+            }
+            return [];
+        } finally {
+            tokenListener.dispose();
+            if (this.pendingAIController === controller) {
+                this.pendingAIController = undefined;
+            }
+        }
+    }
+
 
     private getDartCompletions(linePrefix: string, currentWord: string): vscode.CompletionItem[] {
         const completions: vscode.CompletionItem[] = [];

@@ -31,15 +31,15 @@ export class DiagnosticProvider {
         diagnostic.code = error.code;
 
         // Add quick fix if available
-        const quickFix = this.analyzer.getQuickFix(error);
-        if (quickFix) {
-            diagnostic.relatedInformation = [
-                new vscode.DiagnosticRelatedInformation(
-                    new vscode.Location(document.uri, range),
-                    `Quick fix: ${quickFix}`
-                )
-            ];
-        }
+        // const quickFix = this.analyzer.getQuickFix(error);
+        // if (quickFix) {
+        //     diagnostic.relatedInformation = [
+        //         new vscode.DiagnosticRelatedInformation(
+        //             new vscode.Location(document.uri, range),
+        //             `Quick fix: ${quickFix}`
+        //         )
+        //     ];
+        // }
 
         return diagnostic;
     }
@@ -126,16 +126,16 @@ export class DiagnosticProvider {
 
         // Structured quick fix as relatedInformation, now using the typed
         // QuickFixSuggestion shape (title/kind/detail) instead of a bare string.
-        const quickFix: QuickFixSuggestion | null = this.analyzer.getQuickFix(error);
-        if (quickFix) {
-            const detailSuffix = quickFix.detail ? ` — ${quickFix.detail}` : '';
-            diagnostic.relatedInformation = [
-                new vscode.DiagnosticRelatedInformation(
-                    new vscode.Location(document.uri, range),
-                    `Quick fix (${quickFix.kind}): ${quickFix.title}${detailSuffix}`
-                ),
-            ];
-        }
+        // const quickFix: QuickFixSuggestion | null = this.analyzer.getQuickFix(error);
+        // if (quickFix) {
+        //     const detailSuffix = quickFix.detail ? ` — ${quickFix.detail}` : '';
+        //     diagnostic.relatedInformation = [
+        //         new vscode.DiagnosticRelatedInformation(
+        //             new vscode.Location(document.uri, range),
+        //             `Quick fix (${quickFix.kind}): ${quickFix.title}${detailSuffix}`
+        //         ),
+        //     ];
+        // }
 
         // Fade out / strike-through styling for known unnecessary or
         // deprecated code patterns, matching VS Code's native lint UX.

@@ -2,7 +2,7 @@
   "name": "dart-ai-assistant",
   "displayName": "Dart AI Assistant",
   "description": "Advanced AI-powered Dart assistant with auto-correction, learning ability, security analysis, and intelligent code suggestions",
-  "version": "1.0.5",
+  "version": "1.0.7",
   "publisher": "a-i-0-studio",
   "repository": {
     "type": "git",
@@ -78,8 +78,44 @@
         "title": "Dart AI: Show Prediction Statistics"
       },
       {
+        "command": "dartAI.importProjectForLearning",
+        "title": "Dart AI: Import Project for Learning"
+      },
+      {
         "command": "dartAI.showPreventionStats",
         "title": "Dart AI: Show Prevention Stats"
+      },
+      {
+        "command": "dartAI.addKnowledgeFromUrl",
+        "title": "Dart AI: Add Knowledge from URL"
+      },
+      {
+        "command": "dartAI.addKnowledgeFromFile",
+        "title": "Dart AI: Add Knowledge from File"
+      },
+      {
+        "command": "dartAI.addKnowledgeFromClipboard",
+        "title": "Dart AI: Add Knowledge from Clipboard"
+      },
+      {
+        "command": "dartAI.searchKnowledge",
+        "title": "Dart AI: Search Knowledge Base"
+      },
+      {
+        "command": "dartAI.viewKnowledgeByCategory",
+        "title": "Dart AI: View Knowledge by Category"
+      },
+      {
+        "command": "dartAI.knowledgeStats",
+        "title": "Dart AI: Knowledge Base Statistics"
+      },
+      {
+        "command": "dartAI.exportKnowledge",
+        "title": "Dart AI: Export Knowledge Base"
+      },
+      {
+        "command": "dartAI.importKnowledge",
+        "title": "Dart AI: Import Knowledge Base"
       }
     ],
     "keybindings": [
@@ -120,7 +156,7 @@
         },
         "dartAI.suggestionDelay": {
           "type": "number",
-          "default": 3000,
+          "default": 300,
           "description": "Delay in ms before showing suggestions"
         },
         "dartAI.anthropicApiKey": {

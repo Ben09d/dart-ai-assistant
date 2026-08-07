@@ -109,11 +109,11 @@ export class AdvancedLearningEngine {
                         }
                     });
                 }
-                
+
                 if (saved.preferences) {
                     this.preferences = saved.preferences;
                 }
-                
+
                 if (saved.fixHistory) {
                     this.fixHistory = saved.fixHistory.map((h: any) => ({
                         error: h.error,
@@ -158,19 +158,19 @@ export class AdvancedLearningEngine {
             for (const change of event.contentChanges) {
                 try {
                     const text = change.text;
-                    
+
                     // Learn naming patterns
                     this.learnNamingPatterns(text);
-                    
+
                     // Learn structure patterns
                     this.learnStructurePatterns(text);
-                    
+
                     // Learn import patterns
                     this.learnImportPatterns(text);
-                    
+
                     // Learn function/class styles
                     this.learnCodeStyles(text);
-                    
+
                     // Record edit history
                     this.editHistory.push({
                         timestamp: new Date(),
@@ -294,7 +294,7 @@ export class AdvancedLearningEngine {
                     const methodName = match[1];
                     if (methodName.length > 2) {
                         const key = `method_${methodName}`;
-                        
+
                         let pattern = this.namingPatterns.get(key);
                         if (!pattern) {
                             pattern = {
@@ -704,10 +704,10 @@ export class AdvancedLearningEngine {
         return 'unknown';
     }
 
-    private getSuggestedPatterns(): Pattern[] {
+    getSuggestedPatterns(): Pattern[] {
         try {
             const allPatterns = Array.from(this.patterns.values());
-            
+
             // Suggest patterns that are similar to frequently used ones
             const topPatterns = allPatterns
                 .sort((a, b) => b.frequency - a.frequency)
@@ -715,7 +715,7 @@ export class AdvancedLearningEngine {
 
             const suggestions: Pattern[] = [];
             for (const pattern of topPatterns) {
-                const similar = allPatterns.filter(p => 
+                const similar = allPatterns.filter(p =>
                     this.patternSimilarity(p.pattern, pattern.pattern) > 0.6 &&
                     p !== pattern &&
                     p.frequency < pattern.frequency

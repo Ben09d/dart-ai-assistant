@@ -14,8 +14,8 @@ All notable changes to the "Dart AI Assistant" extension will be documented in t
 - 📝 Intelligent code snippets
 - 🔍 Real-time error detection
 - 🧪 Automatic test generation
-- 💡 Code explanation feature
-- 🔧 Smart refactoring suggestions
+- ✅ Code explanation feature
+- 🛠 Smart refactoring suggestions
 - 🚀 Performance optimization recommendations
 
 ### Features

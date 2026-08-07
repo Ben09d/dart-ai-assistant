@@ -99,11 +99,11 @@ interface FixEntry {
 const QUICK_FIX_DB: Record<string, FixEntry> = {
     // Dart core
     missing_return: {
-        fix: { title: 'Add a return statement', kind: 'insert', detail: 'Insert return <value>; before the closing brace.' },
+        fix: { title: 'Add a return statement', kind: 'insert', detail: 'Insert return <value>; before the closing brace - Dart AI' },
         documentationUrl: 'https://dart.dev/tools/diagnostic-messages#missing_return',
     },
     undefined_identifier: {
-        fix: { title: 'Check import or variable name', kind: 'command', detail: 'Run "Dart: Add Import" or verify spelling.' },
+        fix: { title: 'Check import or variable name', kind: 'command', detail: 'Run "Dart AI: Add Import" or verify spelling - Dart AI' },
         documentationUrl: 'https://dart.dev/tools/diagnostic-messages#undefined_identifier',
     },
     unused_import: {
@@ -111,7 +111,7 @@ const QUICK_FIX_DB: Record<string, FixEntry> = {
         documentationUrl: 'https://dart.dev/tools/diagnostic-messages#unused_import',
     },
     unused_local_variable: {
-        fix: { title: 'Prefix with _ to mark as intentionally unused', kind: 'rename', detail: 'Rename to _variableName.' },
+        fix: { title: 'Prefix with _ to mark as intentionally unused', kind: 'rename', detail: 'Rename to _variableName - Dart AI' },
         documentationUrl: 'https://dart.dev/tools/diagnostic-messages#unused_local_variable',
     },
     dead_code: {
@@ -148,7 +148,7 @@ const QUICK_FIX_DB: Record<string, FixEntry> = {
     },
     // Flutter-specific
     use_build_context_synchronously: {
-        fix: { title: 'Add mounted check before using BuildContext after await', kind: 'insert', detail: 'if (mounted) { ... }' },
+        fix: { title: 'Add mounted check before using BuildContext after await', kind: 'insert', detail: 'if (mounted) { ... } - Dart AI' },
         documentationUrl: 'https://docs.flutter.dev/development/ui/interactive',
     },
     prefer_const_constructors: {
@@ -227,7 +227,7 @@ export class DartAnalyzer {
                     column: line.length,
                     message: 'Missing semicolon',
                     severity: 'error',
-                    source: 'dart_analyze'
+                    source: 'dart_analyze - Dart AI'
                 });
             }
 
@@ -247,7 +247,7 @@ export class DartAnalyzer {
                     column: 0,
                     message: 'Unused import',
                     severity: 'warning',
-                    source: 'dart_analyze'
+                    source: 'dart_analyze - Dart AI'
                 });
             }
 
@@ -259,7 +259,7 @@ export class DartAnalyzer {
                     column: 0,
                     message: 'Missing return statement',
                     severity: 'error',
-                    source: 'dart_analyze'
+                    source: 'dart_analyze - Dart AI'
                 });
             }
 
@@ -289,23 +289,30 @@ export class DartAnalyzer {
             trimmed.endsWith(',') ||
             trimmed.endsWith('(') ||    // ← ADD: Skip opening parens
             trimmed.endsWith(')') ||    // ← ADD: Skip closing parens
+            trimmed.endsWith('=') ||
+            trimmed.endsWith('&&') ||
+            trimmed.startsWith('static') ||
             trimmed.startsWith('if ') ||   // ← ADD: Skip if/for/while
             trimmed.startsWith('for ') ||
             trimmed.startsWith('while ') ||
             trimmed.startsWith('class ') ||  // ← ADD: Skip class/function
             trimmed.startsWith('void ') ||
             trimmed.startsWith('Future') ||
-            trimmed.includes(' => ')) {   // ← ADD: Skip lambda/arrow functions
+            trimmed.startsWith('final') ||
+            trimmed.startsWith('Widget') ||
+            trimmed.includes(' => ') ||
+            trimmed.includes('else')
+        ) {   // ← ADD: Skip lambda/arrow functions
             return false;
         }
 
         // Check for statements that should end with semicolon
-        const requiresSemicolon = /^(var|final|const|return|throw|assert|continue|break|print|[a-zA-Z_]\w*\s*=)/.test(trimmed);
+        const requiresSemicolon = /^(var|final|late|const|return|throw|assert|continue|break|print|[a-zA-Z_]\w*\s*=)/.test(trimmed);
 
         if (requiresSemicolon && !trimmed.endsWith(';')) {
             // Check if it's a multi-line statement
             const nextLine = lines[index + 1]?.trim();
-            if (!nextLine || nextLine.startsWith('.') || nextLine.startsWith('(') || nextLine.startsWith('[')) {
+            if (!nextLine || nextLine.startsWith('.') || nextLine.startsWith('(') || nextLine.startsWith('[') || nextLine.startsWith('?')) {
                 return false;
             }
             return true;
@@ -331,6 +338,11 @@ export class DartAnalyzer {
             trimmedLine.startsWith(':') ||
             trimmedLine.startsWith(',') ||
             trimmedLine.startsWith(')') ||
+            trimmedLine.startsWith('_') ||
+            trimmedLine.startsWith('') ||
+            trimmedLine.startsWith('late') ||
+            trimmedLine.startsWith('final') ||
+            trimmedLine.startsWith('static') ||
             trimmedLine.startsWith('class ') ||  // ← ADD: Skip class declarations
             /^(var|final|const|int|String|double|bool|dynamic|List|Map|Set)\s+/.test(trimmedLine)) {
             return errors;
@@ -344,7 +356,7 @@ export class DartAnalyzer {
             const varName = match[1];
 
             // Skip common Dart built-ins
-            const builtIns = ['print', 'assert', 'throw', 'return', 'var', 'final', 'const', 'int', 'String', 'bool', 'List', 'Map', 'dynamic', 'Future', 'void', 'null', 'true', 'false', 'String?', 'int?', 'double?', 'bool?', 'List?', 'Map?', 'rethrow'];
+            const builtIns = ['print', 'assert', 'throw', 'return', 'late', 'var', 'final', 'const', 'int', 'String', 'bool', 'List', 'Map', 'dynamic', 'Future', 'void', 'null', 'true', 'false', 'String?', 'int?', 'double?', 'bool?', 'List?', 'Map?', 'rethrow'];
             if (builtIns.includes(varName) || this.isDartKeyword(varName)) {
                 continue;
             }
@@ -363,7 +375,7 @@ export class DartAnalyzer {
                     column: match.index || 0,
                     message: `Undefined name '${varName}'`,
                     severity: 'warning',  // ← Changed to WARNING (less aggressive)
-                    source: 'dart_analyze'
+                    source: 'dart_analyze - Dart AI'
                 });
             }
         }
@@ -378,14 +390,20 @@ export class DartAnalyzer {
         // Skip comments, strings, and complex lines
         if (trimmed.startsWith('//') ||
             trimmed.startsWith('/*') ||
+            trimmed.startsWith('final') ||
             trimmed.includes('as ') ||           // ← Skip type casts
             trimmed.includes('is ') ||           // ← Skip type checks
             trimmed.includes('on ') ||             // ← Skip arrow functions
             line.includes('toString()') ||       // ← Skip conversions
             line.includes('toInt()') ||
+            line.includes('final') ||
+            line.includes('late') ||
+            line.includes('=') ||
+            line.includes('{') ||
             line.includes('int.parse') ||
             line.includes('double.parse') ||
             line.includes('rethrow') ||
+            line.includes('required'),
             line.includes('String.from')) {
             return errors;
         }
@@ -401,7 +419,7 @@ export class DartAnalyzer {
                 column: 0,
                 message: 'Type mismatch: Cannot assign String to int',
                 severity: 'warning',  // ← Changed to WARNING
-                source: 'dart_analyze'
+                source: 'dart_analyze - Dart AI'
             });
         }
 
@@ -412,7 +430,7 @@ export class DartAnalyzer {
                 column: 0,
                 message: 'Type mismatch: Cannot assign int to String',
                 severity: 'warning',  // ← Changed to WARNING
-                source: 'dart_analyze'
+                source: 'dart_analyze - Dart AI'
             });
         }
 
@@ -443,14 +461,14 @@ export class DartAnalyzer {
         const trimmed = line.trim();
 
         // Skip control-flow keywords that look like function declarations
-        if (/^(if|for|return|while|switch|rethrow|catch|on|try|else)\b/.test(trimmed)) return false;
+        if (/^(|for|late|return|while|switch|rethrow|catch|on|try)\b/.test(trimmed)) return false;
 
         // Check if this is a function declaration with return type
         const functionMatch = trimmed.match(/(\w+)\s+(\w+)\s*\([^)]*\)\s*{/);
         if (!functionMatch) return false;
 
         const returnType = functionMatch[1];
-        if (returnType === 'void' || returnType === 'Future') return false;
+        if (returnType === 'void' || returnType === 'Future' || returnType === 'else if' || returnType === '}') return false;
 
         // Check if function has a return statement
         let braceCount = 1;
@@ -484,7 +502,7 @@ export class DartAnalyzer {
                     column: line.indexOf(item.old),
                     message: `Deprecated: ${item.message}`,
                     severity: 'warning',
-                    source: 'dart_analyze'
+                    source: 'dart_analyze - Dart AI'
                 });
             }
         }
@@ -526,7 +544,7 @@ export class DartAnalyzer {
                 column: 0,
                 message: 'Non-nullable field should be initialized',
                 severity: 'warning',  // ← Changed to WARNING
-                source: 'dart_analyze'
+                source: 'dart_analyze - Dart AI'
             });
         }
 
@@ -650,15 +668,15 @@ export class DartAnalyzer {
     }
 
     /** Get a quick-fix suggestion for a given error code. */
-    getQuickFix(error: DartError): QuickFixSuggestion | null {
-        const entry = error.code ? QUICK_FIX_DB[error.code] : undefined;
-        return entry?.fix ?? this._inferGenericFix(error) ?? null;
-    }
+    // getQuickFix(error: DartError): QuickFixSuggestion | null {
+    //     const entry = error.code ? QUICK_FIX_DB[error.code] : undefined;
+    //     return entry?.fix ?? this._inferGenericFix(error) ?? null;
+    // }
 
     /** Get the documentation URL for a given error code. */
-    getDocumentationUrl(code: string): string | undefined {
-        return QUICK_FIX_DB[code]?.documentationUrl;
-    }
+    // getDocumentationUrl(code: string): string | undefined {
+    //     return QUICK_FIX_DB[code]?.documentationUrl;
+    // }
 
     /**
      * Convert DartErrors to VS Code Diagnostics for use with
@@ -689,9 +707,26 @@ export class DartAnalyzer {
 
     // ── Private ────────────────────────────────────────────────────────────────
 
+    /**
+         * Run the REAL `dart analyze` compiler on a saved document.
+         * Uses caching + in-flight de-duplication so rapid saves don't spawn
+         * redundant processes. This is the authoritative, save-time-only path.
+         */
+    async analyzeWithRealAnalyzer(document: vscode.TextDocument, bypassCache = false): Promise<AnalysisResult> {
+        const uri = document.uri.toString();
+        if (!bypassCache) {
+            const cached = this.cache.get(uri, this.options.cacheMaxAgeMs);
+            if (cached) return cached;
+        }
+        return this._runOrJoin(uri, document.fileName);
+    }
+
+    // ── Private ────────────────────────────────────────────────────────────────
+
     /** Run analysis or join an already-in-flight request for the same file. */
     private _runOrJoin(uri: string, filePath: string): Promise<AnalysisResult> {
         const existing = this.inFlight.get(uri);
+        console.log('[_runOrJoin] uri =', uri, 'hasExisting =', !!existing);
         if (existing) return existing;
 
         const promise = this._runAnalysis(uri, filePath).finally(() => {
@@ -701,11 +736,11 @@ export class DartAnalyzer {
         this.inFlight.set(uri, promise);
         return promise;
     }
-
     private _runAnalysis(uri: string, filePath: string): Promise<AnalysisResult> {
         return new Promise((resolve) => {
             const dartBin = this._dartBin();
             const workspaceRoot = this._workspaceRoot();
+            console.log('[_runAnalysis] dartBin =', dartBin, 'workspaceRoot =', workspaceRoot, 'filePath =', filePath);
             const extraFlags = this.options.extraFlags.join(' ');
             const startMs = Date.now();
 
@@ -713,6 +748,7 @@ export class DartAnalyzer {
                 `"${dartBin}" analyze "${filePath}" --format=json ${extraFlags}`.trim(),
                 { cwd: workspaceRoot, maxBuffer: 4 * 1024 * 1024 },
                 (_err, stdout) => {
+                    console.log('[_runAnalysis] exec callback fired, stdout length =', stdout?.length ?? 0, 'err =', _err);
                     const durationMs = Date.now() - startMs;
 
                     if (!stdout?.trim()) {
@@ -723,9 +759,22 @@ export class DartAnalyzer {
 
                     try {
                         const json = JSON.parse(stdout);
-                        const errors = (json.diagnostics ?? []).map((d: any) =>
-                            this._mapDiagnostic(d)
-                        );
+                        const allDiagnostics = json.diagnostics ?? [];
+
+                        // dart analyze scans the whole project — keep only diagnostics
+                        // that belong to THIS specific file, not SDK/package dependencies.
+                        const normalizedFilePath = filePath.replace(/\\/g, '/').toLowerCase();
+                        console.log('[_runAnalysis] normalizedFilePath =', normalizedFilePath);
+                        if (allDiagnostics.length > 0) {
+                            console.log('[_runAnalysis] diagFile sample =', (allDiagnostics[0].location?.file ?? '').replace(/\\/g, '/').toLowerCase());
+                        }
+                        const scoped = allDiagnostics.filter((d: any) => {
+                            const diagFile = (d.location?.file ?? '').replace(/\\/g, '/').toLowerCase();
+                            return diagFile.endsWith(normalizedFilePath.split('/').pop() ?? '') &&
+                                diagFile === normalizedFilePath;
+                        });
+
+                        const errors = scoped.map((d: any) => this._mapDiagnostic(d));
                         const deduped = this._deduplicate(errors);
                         const result = this._makeResult(uri, deduped, durationMs, false);
                         this.cache.set(uri, result, this.options.cacheMaxAgeMs);
@@ -749,7 +798,7 @@ export class DartAnalyzer {
         const severity = this._mapSeverity(d.severity);
         const message = d.message ?? 'Unknown diagnostic';
         const id = this._errorId(code, startLine, startCol);
-        const fixEntry = QUICK_FIX_DB[code];
+        // const fixEntry = QUICK_FIX_DB[code];
 
         return {
             id,
@@ -760,10 +809,10 @@ export class DartAnalyzer {
             message,
             severity,
             code,
-            source: 'dart_analyze',
-            quickFix: fixEntry?.fix,
-            documentationUrl: fixEntry?.documentationUrl
-                ?? (code ? `https://dart.dev/tools/diagnostic-messages#${code}` : undefined),
+            source: 'dart_analyze - Dart AI',
+            // quickFix: fixEntry?.fix,
+            //     documentationUrl: fixEntry?.documentationUrl
+            //         ?? (code ? `https://dart.dev/tools/diagnostic-messages#${code}` : undefined),
         };
     }
 

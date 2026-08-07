@@ -12,13 +12,13 @@
  *    - Code smell detection: 6 types of quality issues
  *    - Trend analysis: Improving/stable/new patterns
  * 
- * 🔧 ERROR HANDLING
+ * 🛠 ERROR HANDLING
  *    - Real-time error detection
  *    - Auto-correction with Ctrl+Shift+F
  *    - Smart fix suggestions using pattern learning
  *    - Similarity matching (85%+ accuracy)
  * 
- * 💡 INTELLIGENCE
+ * ✅ INTELLIGENCE
  *    - AI-powered completions and suggestions
  *    - Code optimization
  *    - Intelligent refactoring
@@ -65,8 +65,13 @@ import { ErrorPrevention } from './engines/errorPrevention';
 import { AdvancedCompletionEngine } from './providers/advancedCompletionEngine';
 import { AdvancedCompletionAdapter } from './providers/advancedCompletionAdapter';
 import { PatternPredictor } from './engines/patternPredictor';
+import { ProjectImporter } from './services/projectImporter';
+import { KnowledgeBaseManager } from './engines/knowledgeBaseManager';
 // Additive: HoverProvider import, also on its own line.
-//import { HoverProvider } from './providers/hoverProvider';
+import { HoverProvider } from './providers/hoverProvider';
+import { registerKnowledgeBaseCommands } from './commands/knowledgeBaseCommands';
+import * as path from 'path';
+import * as fs from 'fs';
 
 declare const console: any;
 
@@ -89,17 +94,17 @@ let errorPrevention: ErrorPrevention | undefined;
 let completionProvider: CompletionProvider | undefined;
 let codeActionProvider: CodeActionProvider | undefined;
 let advancedCompletionEngine: AdvancedCompletionEngine | undefined;
-let patternPredictor: PatternPredictor | undefined;
-let healthStatusBar: vscode.StatusBarItem | undefined;
+let patternPredictor: PatternPredictor | undefined; let healthStatusBar: vscode.StatusBarItem | undefined;
 let activeAIController: AbortController | undefined;
-//let hoverProvider: HoverProvider | undefined;
+let projectImporter: ProjectImporter | undefined;
+let knowledgeBaseManager: KnowledgeBaseManager | undefined;;
+let hoverProvider: HoverProvider | undefined;
+let knowledgeBase: KnowledgeBaseManager | undefined;
 
 // ============================================================================
 // INITIALIZATION HELPERS
 // ============================================================================
 
-const liveAnalysisTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const LIVE_ANALYSIS_DEBOUNCE_MS = 700;
 
 
 /**
@@ -110,6 +115,14 @@ function getAIService(context: vscode.ExtensionContext): AIService {
         aiService = new AIService(context);
     }
     return aiService;
+}
+
+function getKnowledgeBase(context: vscode.ExtensionContext): KnowledgeBaseManager {
+    if (!knowledgeBase) {
+        knowledgeBase = new KnowledgeBaseManager(path.join(context.globalStorageUri.fsPath, 'knowledge-base.json'));
+    }
+    return knowledgeBase;
+
 }
 
 /**
@@ -154,7 +167,7 @@ function getCodeActionProvider(context: vscode.ExtensionContext): CodeActionProv
                 getDartAnalyzer(),
                 getErrorPrevention(),
                 getPatternPredictor(context),
-                getAIService(context)
+                getAIService(context),
             );
         } catch (error) {
             console.error('Failed to initialize code action provider:', error);
@@ -264,6 +277,26 @@ function getErrorPrevention(): ErrorPrevention {
     return errorPrevention!;
 }
 
+function getKnowledgeBaseManager(context: vscode.ExtensionContext): KnowledgeBaseManager {
+    if (!knowledgeBaseManager) {
+        const dbPath = path.join(context.globalStorageUri.fsPath, 'knowledge-base.json');
+        knowledgeBaseManager = new KnowledgeBaseManager(dbPath);
+    }
+    return knowledgeBaseManager;
+}
+
+function getProjectImporter(context: vscode.ExtensionContext): ProjectImporter {
+    if (!projectImporter) {
+        projectImporter = new ProjectImporter(
+            getLearningEngine(context),
+            getAdvancedLearningEngine(context),
+            getCodePredictionEngine(context),
+            getKnowledgeBaseManager(context)
+        );
+    }
+    return projectImporter;
+}
+
 
 
 
@@ -290,6 +323,7 @@ export async function activate(context: vscode.ExtensionContext) {
             getCodePredictionEngine(context);
             getErrorPrevention();
             getPatternPredictor(context);
+            getKnowledgeBase(context);
             vscode.window.showInformationMessage('Dart AI Assistant: All services initialized successfully');
         } catch (error) {
             console.error('ACTUAL ERROR:', error);
@@ -299,8 +333,26 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
         }
 
+
+        // ΓöÇΓöÇ Initialize Knowledge Base ΓöÇΓöÇ
+        const knowledgeDbPath = path.join(
+            context.globalStorageUri.fsPath,
+            'knowledge-base.json'
+        );
+
+        // Ensure global storage directory exists
+        const fs = require('fs');
+        if (!fs.existsSync(context.globalStorageUri.fsPath)) {
+            fs.mkdirSync(context.globalStorageUri.fsPath, { recursive: true });
+        }
+        // Register all knowledge commands using the shared singleton instance
+        registerKnowledgeBaseCommands(context, getKnowledgeBaseManager(context));
+
+        console.log('[dartAI] Knowledge Base initialized');
+
+
         // Register completion provider for intelligent code suggestions
-        const completionProvider = new CompletionProvider(getAIService(context), getLearningEngine(context));
+        const completionProvider = new CompletionProvider(getAIService(context), getLearningEngine(context), getAdvancedLearningEngine(context));
         context.subscriptions.push(
             vscode.languages.registerCompletionItemProvider(
                 'dart',
@@ -321,7 +373,7 @@ export async function activate(context: vscode.ExtensionContext) {
         );
 
         // Register snippet provider
-        const snippetProvider = new SnippetProvider(getLearningEngine(context));
+        const snippetProvider = new SnippetProvider(getLearningEngine(context), getAdvancedLearningEngine(context));
         context.subscriptions.push(
             vscode.languages.registerCompletionItemProvider('dart', snippetProvider)
         );
@@ -353,6 +405,26 @@ export async function activate(context: vscode.ExtensionContext) {
                 { providedCodeActionKinds: CodeActionProvider.providedCodeActionKinds }
             )
         );
+
+
+
+        // ── Additive: register the HoverProvider ────────────────────────────────
+        // Surfaces DartAnalyzer diagnostics, ErrorPrevention findings,
+        // PatternPredictor recommendations, and LearningEngine usage stats
+        // directly on hover, plus a deferred "Explain with AI" link.
+        hoverProvider = new HoverProvider(
+            getDartAnalyzer(),
+            getErrorPrevention(),
+            getPatternPredictor(context),
+            getLearningEngine(context),
+        /* aiAvailable */ true
+
+        );
+        context.subscriptions.push(
+            vscode.languages.registerHoverProvider('dart', hoverProvider)
+        );
+
+
 
 
         const advEngine = getAdvancedCompletionEngine(context);
@@ -403,7 +475,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Show welcome message (but don't block if there's an error)
         vscode.window.showInformationMessage(
-            'Dart AI Assistant ready! Ctrl+Shift+F to fix errors, Ctrl+Space for completions.'
+            'Dart AI Assistant ready! Ctrl+Shift+P for all controls, Ctrl+Space for completions.'
         );
     } catch (error) {
 
@@ -421,7 +493,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (editor && editor.document.languageId === 'dart') {
             updateHealthStatusBarForDocument(editor.document, context);
         } else {
-            healthStatusBar.text = '$(circle-outline) Dart: —';
+            healthStatusBar.text = '$(circle-outline) Dart AI: —';
             healthStatusBar.tooltip = 'Open a Dart file to see code health';
             healthStatusBar.show();
         }
@@ -446,38 +518,93 @@ export async function activate(context: vscode.ExtensionContext) {
                     vscode.window.showErrorMessage('Please open a Dart file');
                     return;
                 }
+                const targetEditor = editor;
 
-                const health = getPatternPredictor(context).calculateCodeHealth(editor.document);
-                const predictions = await getErrorPrevention().analyzeForPrevention(editor.document);
-                const stats = getErrorPrevention().getPreventionStats(editor.document);
+                const health = getPatternPredictor(context).calculateCodeHealth(targetEditor.document);
+                const predictions = await getErrorPrevention().analyzeForPrevention(targetEditor.document);
+                const diagnosticResult = await getDiagnosticsForDocument(targetEditor.document);
+                const summary = `${health.summary}\n\nErrors: ${diagnosticResult.errors} | Warnings: ${diagnosticResult.warnings} | Infos: ${diagnosticResult.infos}`;
+                const diagnosticIssues: ClickableIssue[] = diagnosticResult.diagnostics.slice(0, 20).map(d => ({
+                    line: d.range.start.line,
+                    message: d.message,
+                    suggestion: d.source ? `Source: ${d.source}` : 'See Problems panel for details',
+                    severity: diagnosticSeverityToString(d.severity),
+                }));
 
-                let report = `=== Code Health Report ===\n\n`;
-                report += `Score: ${health.score}/100 (Grade ${health.grade})\n`;
-                report += `${health.summary}\n\n`;
-                report += `Error Prevention Stats:\n`;
-                report += `- Errors: ${stats.errors}\n`;
-                report += `- Warnings: ${stats.warnings}\n`;
-                report += `- Infos: ${stats.infos}\n\n`;
-                report += `Top Issues:\n`;
-                for (const issue of health.topIssues) {
-                    report += `- [${issue.severity.toUpperCase()}] ${issue.title}\n  ${issue.suggestion}\n`;
-                }
-                if (predictions.length > 0) {
-                    report += `\nLive Prevention Findings (first 10):\n`;
-                    for (const p of predictions.slice(0, 10)) {
-                        report += `Line ${p.line + 1}: ${p.message}\n  Suggestion: ${p.suggestion}\n`;
-                    }
-                }
+                const preventionIssues: ClickableIssue[] = predictions.slice(0, 20).map(p => ({
+                    line: p.line,
+                    message: p.message,
+                    suggestion: p.suggestion,
+                    severity: p.severity,
+                }));
 
+                const healthIssues: ClickableIssue[] = health.topIssues
+                    .filter(issue => issue.affectedLines && issue.affectedLines.length > 0)
+                    .map(issue => ({
+                        line: issue.affectedLines![0],
+                        message: issue.title,
+                        suggestion: issue.suggestion,
+                        severity: issue.severity,
+                    }));
+
+                const issues: ClickableIssue[] = [...diagnosticIssues, ...healthIssues, ...preventionIssues].slice(0, 20);
                 const panel = vscode.window.createWebviewPanel(
                     'codeHealth',
                     'Code Health',
                     vscode.ViewColumn.Two,
-                    {}
+                    { enableScripts: true }
                 );
-                panel.webview.html = getReportHtml(report);
+                panel.webview.html = getClickableReportHtml('Code Health Report', summary, issues);
+
+                panel.webview.onDidReceiveMessage(async (message) => {
+                    if (message.command === 'jumpToLine') {
+                        const doc = targetEditor.document;
+                        const line = Math.min(message.line, doc.lineCount - 1);
+                        const range = doc.lineAt(line).range;
+                        await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One, selection: range });
+                    }
+                });
+
+                // Auto-refresh only while this panel is the active tab, and only on save
+                const saveListener = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+                    if (!panel.visible) return;
+                    if (savedDoc.uri.toString() !== targetEditor.document.uri.toString()) return;
+                    const freshHealth = getPatternPredictor(context).calculateCodeHealth(savedDoc);
+                    const freshPredictions = await getErrorPrevention().analyzeForPrevention(savedDoc);
+                    const freshStats = getErrorPrevention().getPreventionStats(savedDoc);
+                    const freshDiagnostics = await getDiagnosticsForDocument(savedDoc);
+                    const freshSummary = `${freshHealth.summary}\n\nErrors: ${freshDiagnostics.errors} | Warnings: ${freshDiagnostics.warnings} | Infos: ${freshDiagnostics.infos}`;
+                    const freshDiagnosticIssues: ClickableIssue[] = freshDiagnostics.diagnostics.slice(0, 20).map(d => ({
+                        line: d.range.start.line,
+                        message: d.message,
+                        suggestion: d.source ? `Source: ${d.source}` : 'See Problems panel for details',
+                        severity: diagnosticSeverityToString(d.severity),
+                    }));
+                    const freshPreventionIssues: ClickableIssue[] = freshPredictions.slice(0, 20).map(p => ({
+                        line: p.line,
+                        message: p.message,
+                        suggestion: p.suggestion,
+                        severity: p.severity,
+                    }));
+                    const freshHealthIssues: ClickableIssue[] = freshHealth.topIssues
+                        .filter(issue => issue.affectedLines && issue.affectedLines.length > 0)
+                        .map(issue => ({
+                            line: issue.affectedLines![0],
+                            message: issue.title,
+                            suggestion: issue.suggestion,
+                            severity: issue.severity,
+                        }));
+
+                    const freshIssues = [...freshDiagnosticIssues, ...freshHealthIssues, ...freshPreventionIssues].slice(0, 20);
+                    panel.webview.html = getClickableReportHtml('Code Health Report', freshSummary, freshIssues);
+                });
+
+                panel.onDidDispose(() => {
+                    saveListener.dispose();
+                });
             })
         );
+
 
         // ── Cancel any in-flight AI request (bound to a keybinding by the user) ──
         context.subscriptions.push(
@@ -747,7 +874,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 quickFix?: string;
                 documentationUrl?: string;
             }) => {
-                const detail = rec.quickFix ? `\n\nSuggested approach: ${rec.quickFix}` : '';
+                const detail = rec.quickFix ? `\n\nSuggested approach: ${rec.quickFix} - Dart AI` : '';
                 const choice = await vscode.window.showInformationMessage(
                     `${rec.title}\n\n${rec.suggestion}${detail}`,
                     ...(rec.documentationUrl ? ['Open Documentation', 'Dismiss'] : ['Dismiss'])
@@ -894,7 +1021,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
                     await vscode.window.withProgress({
                         location: vscode.ProgressLocation.Notification,
-                        title: "🔧 Fixing errors...",
+                        title: "🛠 Fixing errors...",
                         cancellable: false
                     }, async (progress) => {
                         try {
@@ -950,26 +1077,62 @@ export async function activate(context: vscode.ExtensionContext) {
                     vscode.window.showErrorMessage('Please open a Dart file');
                     return;
                 }
+                const targetEditor = editor;
 
-                const predictions = await getErrorPrevention().analyzeForPrevention(editor.document);
+                const predictions = await getErrorPrevention().analyzeForPrevention(targetEditor.document);
                 if (predictions.length === 0) {
                     vscode.window.showInformationMessage('No potential errors detected!');
                     return;
                 }
 
-                let report = `=== Error Prevention Report ===\n\nDetected ${predictions.length} potential errors:\n\n`;
-                for (const prediction of predictions.slice(0, 10)) {
-                    report += `Line ${prediction.line + 1}: ${prediction.message}\n`;
-                    report += `Suggestion: ${prediction.suggestion}\n\n`;
-                }
+                const summary = `Detected ${predictions.length} potential issue(s). Click any item to jump to that line.`;
+                const issues: ClickableIssue[] = predictions.slice(0, 20).map(p => ({
+                    line: p.line,
+                    message: p.message,
+                    suggestion: p.suggestion,
+                    severity: p.severity,
+                }));
 
                 const panel = vscode.window.createWebviewPanel(
                     'errorPrevention',
                     'Error Prevention',
                     vscode.ViewColumn.Two,
-                    {}
+                    { enableScripts: true }
                 );
-                panel.webview.html = getReportHtml(report);
+                panel.webview.html = getClickableReportHtml('Error Prevention Report', summary, issues);
+
+                panel.webview.onDidReceiveMessage(async (message) => {
+                    if (message.command === 'jumpToLine') {
+                        const doc = targetEditor.document;
+                        const line = Math.min(message.line, doc.lineCount - 1);
+                        const range = doc.lineAt(line).range;
+                        await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One, selection: range });
+                    }
+                });
+
+                const saveListener = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+                    if (!panel.visible) return;
+                    if (savedDoc.uri.toString() !== targetEditor.document.uri.toString()) return;
+
+                    const freshPredictions = await getErrorPrevention().analyzeForPrevention(savedDoc);
+                    if (freshPredictions.length === 0) {
+                        panel.webview.html = getClickableReportHtml('Error Prevention Report', 'No potential errors detected!', []);
+                        return;
+                    }
+
+                    const freshSummary = `Detected ${freshPredictions.length} potential issue(s). Click any item to jump to that line.`;
+                    const freshIssues: ClickableIssue[] = freshPredictions.slice(0, 20).map(p => ({
+                        line: p.line,
+                        message: p.message,
+                        suggestion: p.suggestion,
+                        severity: p.severity,
+                    }));
+                    panel.webview.html = getClickableReportHtml('Error Prevention Report', freshSummary, freshIssues);
+                });
+
+                panel.onDidDispose(() => {
+                    saveListener.dispose();
+                });
             })
         );
 
@@ -992,7 +1155,7 @@ export async function activate(context: vscode.ExtensionContext) {
                         try {
                             const optimizations = await getAIService(context).optimizeCode(
                                 editor.document.getText(),
-                                editor.selection
+
                             );
 
                             await editor.edit(editBuilder => {
@@ -1246,7 +1409,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
                     // Show quick pick
                     const items = rankedPredictions.map((p, i) => ({
-                        label: `${i === 0 ? '🎯' : '💡'} ${p.prediction}`,
+                        label: `${i === 0 ? '🎯' : '✅'} ${p.prediction}`,
                         description: `Confidence: ${p.confidence}% | Frequency: ${p.frequency}`,
                         prediction: p.prediction
                     }));
@@ -1287,10 +1450,10 @@ export async function activate(context: vscode.ExtensionContext) {
                     const stats = predEngine.getStatistics();
 
                     const message = `
-🔮 CODE PREDICTION STATISTICS
+🏹 CODE PREDICTION STATISTICS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 Total Sequences: ${stats.totalSequences}
-🔧 Function Patterns: ${stats.totalFunctionPatterns}
+🛠 Function Patterns: ${stats.totalFunctionPatterns}
 📦 Block Patterns: ${stats.totalBlockPatterns}
 💾 Memory Used: ${stats.memoryEstimate}
 
@@ -1302,6 +1465,54 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
                 } catch (error) {
                     console.error('Error showing prediction stats:', error);
                 }
+            })
+        );
+
+        // ======================================================================
+        // IMPORT PROJECT FOR LEARNING — train instantly from an existing project
+        // ======================================================================
+        context.subscriptions.push(
+            vscode.commands.registerCommand('dartAI.importProjectForLearning', async () => {
+                const folders = await vscode.window.showOpenDialog({
+                    canSelectFiles: false,
+                    canSelectFolders: true,
+                    canSelectMany: false,
+                    openLabel: 'Import Project',
+                    title: 'Select a Dart/Flutter project folder to learn from',
+                });
+
+                if (!folders || folders.length === 0) return;
+                const folderUri = folders[0];
+
+                await vscode.window.withProgress(
+                    {
+                        location: vscode.ProgressLocation.Notification,
+                        title: '📚 Importing project for learning',
+                        cancellable: false,
+                    },
+                    async (progress) => {
+                        try {
+                            const importer = getProjectImporter(context);
+                            const summary = await importer.importProject(folderUri, (message, increment) => {
+                                progress.report({ message, increment });
+                            });
+
+                            const resultMessage = `✅ Learned from ${summary.filesProcessed} file(s) ` +
+                                `(scanned ${summary.filesScanned}, skipped ${summary.filesSkipped} over the cap). ` +
+                                `${summary.knowledgeItemsAdded} knowledge items added.` +
+                                (summary.errors.length > 0 ? ` ${summary.errors.length} file(s) had errors.` : '');
+
+                            vscode.window.showInformationMessage(resultMessage);
+
+                            if (summary.errors.length > 0) {
+                                console.warn('[importProjectForLearning] Errors:', summary.errors);
+                            }
+                        } catch (error) {
+                            console.error('Error importing project:', error);
+                            vscode.window.showErrorMessage(`Failed to import project: ${error}`);
+                        }
+                    }
+                );
             })
         );
     }
@@ -1363,26 +1574,7 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
 
 
 
-/**
- * Debounced live analysis — runs errorPrevention + patternPredictor on every
- * keystroke but collapses rapid edits into a single pass per document,
- * matching the debounce pattern already used by DartAnalyzer/AIService.
- */function scheduleLiveAnalysis(document: vscode.TextDocument, context: vscode.ExtensionContext): void {
-    const key = document.uri.toString();
-    const existing = liveAnalysisTimers.get(key);
-    if (existing) clearTimeout(existing);
 
-    const timer = setTimeout(async () => {
-        liveAnalysisTimers.delete(key);
-        try {
-            await runLiveAnalysis(document, context);
-        } catch (err) {
-            console.error('[dartAI] live analysis failed:', err);
-        }
-    }, LIVE_ANALYSIS_DEBOUNCE_MS);
-
-    liveAnalysisTimers.set(key, timer);
-}
 /**
  * Runs the lightweight regex-based analysers (errorPrevention,
  * patternPredictor) and refreshes the code-health status bar item.
@@ -1399,20 +1591,28 @@ async function runLiveAnalysis(document: vscode.TextDocument, context: vscode.Ex
     if (!errorPrevention || !patternPredictor) return;
 
     const predictions = await errorPrevention.analyzeForPrevention(document);
-    const recs = patternPredictor.generateRecommendations(document);
 
-    // Surface only if this document is still the active editor, to avoid
-    // updating the status bar for a file the user has since navigated away from.
     const active = vscode.window.activeTextEditor;
     if (active && active.document.uri.toString() === document.uri.toString()) {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.languageId !== 'dart') {
+            vscode.window.showErrorMessage('Please open a Dart file');
+            return;
+        }
+        const targetEditor = editor;
         const errorCount = predictions.filter(p => p.severity === 'error').length;
         const warnCount = predictions.filter(p => p.severity === 'warning').length;
-        const recErrorCount = recs.filter(r => r.severity === 'error').length;
+        const health = getPatternPredictor(context).calculateCodeHealth(targetEditor.document);
+        const diagnosticResult = await getDiagnosticsForDocument(targetEditor.document);
+        // const summary = `${health.summary}\n\nErrors: ${diagnosticResult.errors} | Warnings: ${diagnosticResult.warnings} | Infos: ${diagnosticResult.infos}`;
 
         if (healthStatusBar) {
-            const totalErrors = errorCount + recErrorCount;
-            const icon = totalErrors > 0 ? '$(error)' : warnCount > 0 ? '$(warning)' : '$(check)';
-            healthStatusBar.text = `${icon} Dart: ${totalErrors} err / ${warnCount} warn`;
+            const icon = errorCount > 0 ? '$(error)' : warnCount > 0 ? '$(warning)' : '$(check)';
+            // healthStatusBar.text = `${icon} Dart: ${errorCount} err / ${warnCount} warn`;
+            // healthStatusBar.tooltip = 'Click for full code health report';
+            // healthStatusBar.show();
+
+            healthStatusBar.text = `${icon} Dart AI: ${diagnosticResult.errors} err | ${diagnosticResult.warnings} warn | ${diagnosticResult.infos} info`;
             healthStatusBar.tooltip = 'Click for full code health report';
             healthStatusBar.show();
         }
@@ -1468,38 +1668,46 @@ function setupDiagnostics(context: vscode.ExtensionContext) {
         const diagnosticCollection = vscode.languages.createDiagnosticCollection('dartAI');
         context.subscriptions.push(diagnosticCollection);
 
-        // Analyze on document change
+        // Single debounced watcher: runs diagnostics + live status bar analysis together
+        const diagnosticsTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
         context.subscriptions.push(
-            vscode.workspace.onDidChangeTextDocument(async (event) => {
+            vscode.workspace.onDidChangeTextDocument((event) => {
                 try {
                     if (event.document.languageId !== 'dart') return;
 
                     const config = vscode.workspace.getConfiguration('dartAI');
-                    if (!config.get('enableAutoCorrect')) return;
+                    const key = event.document.uri.toString();
+                    const existing = diagnosticsTimers.get(key);
+                    if (existing) clearTimeout(existing);
 
-                    // Debounce
-                    setTimeout(async () => {
+                    const timer = setTimeout(async () => {
+                        diagnosticsTimers.delete(key);
+
+                        if (config.get('enableAutoCorrect')) {
+                            try {
+                                const diagnostics = await getDiagnosticProvider().provideRichDiagnostics(event.document);
+                                diagnosticCollection.set(event.document.uri, diagnostics);
+                            } catch (error) {
+                                console.error('Error providing diagnostics:', error);
+                            }
+                        }
+
                         try {
-                            const diagnostics = await getDiagnosticProvider().provideRichDiagnostics(event.document);
-                            diagnosticCollection.set(event.document.uri, diagnostics);
+                            await runLiveAnalysis(event.document, context);
                         } catch (error) {
-                            console.error('Error providing diagnostics:', error);
+                            console.error('Error running live analysis:', error);
                         }
                     }, config.get('suggestionDelay') || 300);
+
+                    diagnosticsTimers.set(key, timer);
                 } catch (error) {
                     console.error('Error in onDidChangeTextDocument:', error);
                 }
             })
         );
-        // Live health status bar analysis (errorPrevention + patternPredictor)
-        context.subscriptions.push(
-            vscode.workspace.onDidChangeTextDocument((event) => {
-                if (event.document.languageId !== 'dart') return;
-                scheduleLiveAnalysis(event.document, context);
-            })
-        );
 
-        // Analyze on document open
+        // Analyze on document open (regex-based, fast — file may not be saved yet)
         context.subscriptions.push(
             vscode.workspace.onDidOpenTextDocument(async (document) => {
                 try {
@@ -1509,6 +1717,21 @@ function setupDiagnostics(context: vscode.ExtensionContext) {
                     diagnosticCollection.set(document.uri, diagnostics);
                 } catch (error) {
                     console.error('Error in onDidOpenTextDocument:', error);
+                }
+            })
+        );
+
+        // On SAVE: run the real Dart analyzer for maximum accuracy
+        context.subscriptions.push(
+            vscode.workspace.onDidSaveTextDocument(async (document) => {
+                try {
+                    if (document.languageId !== 'dart') return;
+
+                    const result = await getDartAnalyzer().analyzeWithRealAnalyzer(document);
+                    const diagnostics = getDartAnalyzer().toDiagnostics(result.errors);
+                    diagnosticCollection.set(document.uri, diagnostics);
+                } catch (error) {
+                    console.error('Error running real dart analyze on save:', error);
                 }
             })
         );
@@ -1661,7 +1884,7 @@ function showAdvancedLearningDashboard(context: vscode.ExtensionContext) {
 🧠 ADVANCED LEARNING STATISTICS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📚 Total Patterns: ${stats.totalPatterns}
-🔧 Fixes Recorded: ${stats.totalFixes}
+🛠 Fixes Recorded: ${stats.totalFixes}
 📝 Naming Style: ${stats.preferredNaming}
 ⭐ Learning Accuracy: ${stats.learningAccuracy}%
 📈 Learning Trend: ${stats.learningTrend}
@@ -1674,6 +1897,43 @@ View full dashboard: Ctrl+Shift+P → "View Learning Dashboard"
         vscode.window.showInformationMessage(message);
     } catch (error) {
         console.error('Error showing dashboard:', error);
+    }
+}
+
+async function getDiagnosticsForDocument(document: vscode.TextDocument): Promise<{ errors: number; warnings: number; infos: number; diagnostics: vscode.Diagnostic[] }> {
+    const diagnostics = vscode.languages.getDiagnostics(document.uri)
+        .filter(d => !(d.severity === vscode.DiagnosticSeverity.Hint && d.source === 'Dart AI Assistant'));
+    let errors = 0;
+    let warnings = 0;
+    let infos = 0;
+    for (const diagnostic of diagnostics) {
+        switch (diagnostic.severity) {
+            case vscode.DiagnosticSeverity.Error:
+                errors++;
+                break;
+            case vscode.DiagnosticSeverity.Warning:
+                warnings++;
+                break;
+            case vscode.DiagnosticSeverity.Information:
+                infos++;
+                break;
+        }
+    }
+    return { errors, warnings, infos, diagnostics };
+}
+
+function diagnosticSeverityToString(severity: vscode.DiagnosticSeverity): string {
+    switch (severity) {
+        case vscode.DiagnosticSeverity.Error:
+            return 'error';
+        case vscode.DiagnosticSeverity.Warning:
+            return 'warning';
+        case vscode.DiagnosticSeverity.Information:
+            return 'info';
+        case vscode.DiagnosticSeverity.Hint:
+            return 'hint';
+        default:
+            return 'info';
     }
 }
 
@@ -1756,6 +2016,102 @@ function getReportHtml(report: string): string {
     `;
 }
 
+interface ClickableIssue {
+    line: number;
+    message: string;
+    suggestion?: string;
+    severity?: string;
+}
+
+/**
+ * Structured, clickable version of getReportHtml(). Each issue is a clickable
+ * row; clicking posts a message back to the extension host to jump to that line.
+ */
+function getClickableReportHtml(title: string, summary: string, issues: ClickableIssue[]): string {
+    const escape = (s: string) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const rows = issues.map(issue => {
+        const sevClass = issue.severity ?? 'info';
+        return `
+            <div class="issue ${sevClass}" onclick="jumpToLine(${issue.line})">
+                <div class="issue-line">Line ${issue.line + 1}</div>
+                <div class="issue-message">${escape(issue.message)}</div>
+                ${issue.suggestion ? `<div class="issue-suggestion">${escape(issue.suggestion)}</div>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${escape(title)}</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    padding: 20px;
+                    line-height: 1.6;
+                    color: var(--vscode-foreground);
+                    background-color: var(--vscode-editor-background);
+                }
+                h1 {
+                    color: var(--vscode-textLink-foreground);
+                    border-bottom: 2px solid var(--vscode-textLink-foreground);
+                    padding-bottom: 10px;
+                }
+                .summary {
+                    background: var(--vscode-textBlockQuote-background);
+                    padding: 12px 15px;
+                    border-radius: 5px;
+                    margin-bottom: 16px;
+                    white-space: pre-wrap;
+                }
+                .issue {
+                    cursor: pointer;
+                    padding: 10px 14px;
+                    margin-bottom: 8px;
+                    border-left: 4px solid var(--vscode-textLink-foreground);
+                    background: var(--vscode-textBlockQuote-background);
+                    border-radius: 4px;
+                    transition: background 0.15s;
+                }
+                .issue:hover {
+                    background: var(--vscode-list-hoverBackground);
+                }
+                .issue.error { border-left-color: #ff4444; }
+                .issue.warning { border-left-color: #ffaa00; }
+                .issue.info { border-left-color: #00aaff; }
+                .issue-line {
+                    font-weight: bold;
+                    font-size: 0.85em;
+                    opacity: 0.75;
+                }
+                .issue-message { margin-top: 2px; }
+                .issue-suggestion {
+                    margin-top: 4px;
+                    font-size: 0.9em;
+                    opacity: 0.85;
+                    font-style: italic;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>${escape(title)}</h1>
+            <div class="summary">${escape(summary)}</div>
+            ${rows || '<p>No issues found.</p>'}
+            <script>
+                const vscode = acquireVsCodeApi();
+                function jumpToLine(line) {
+                    vscode.postMessage({ command: 'jumpToLine', line });
+                }
+            </script>
+        </body>
+        </html>
+    `;
+}
+
 
 /**
  * HTML template for code recommendations
@@ -1791,7 +2147,7 @@ function getRecommendationsHtml(recommendations: any[]): string {
             </style>
         </head>
         <body>
-            <h1>💡 Code Recommendations</h1>
+            <h1>✅ Code Recommendations</h1>
     `;
 
     for (const rec of recommendations) {
@@ -1828,12 +2184,6 @@ function getRecommendationsHtml(recommendations: any[]): string {
         if (advancedLearningEngine) {
             console.log('💾 Saving advanced learning engine data...');
         }
-
-        // Clear any pending live-analysis timers
-        for (const timer of liveAnalysisTimers.values()) {
-            clearTimeout(timer);
-        }
-        liveAnalysisTimers.clear();
 
         // Cleanup services
         aiService = undefined;

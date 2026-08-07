@@ -4,7 +4,7 @@ import { ErrorPrevention, ErrorPrediction } from '../engines/errorPrevention';
 import { PatternPredictor, CodeRecommendation } from '../engines/patternPredictor';
 
 /**
- * Provides VS Code Code Actions (the 💡 lightbulb menu) for Dart files.
+ * Provides VS Code Code Actions (the ✅ lightbulb menu) for Dart files.
  *
  * This is the missing bridge between the rich quick-fix data already
  * produced by DartAnalyzer (analyzer diagnostics), ErrorPrevention
@@ -106,7 +106,7 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
         const actions: vscode.CodeAction[] = [];
 
         for (const diagnostic of diagnostics) {
-            if (diagnostic.source !== 'Dart AI Assistant' && diagnostic.source !== 'dart_analyze') continue;
+            if (diagnostic.source !== 'Dart AI Assistant' && diagnostic.source !== 'dart_analyze - Dart AI') continue;
             if (!diagnostic.range.intersection(range) && !diagnostic.range.contains(range.start)) continue;
 
             const code = this._codeFromDiagnostic(diagnostic);
@@ -117,43 +117,43 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
                 message: diagnostic.message,
                 severity: this._severityFromDiagnostic(diagnostic),
                 code,
-                source: diagnostic.source || 'dart_analyze',
+                source: diagnostic.source || 'dart_analyze - Dart AI',
             };
 
-            const fix: QuickFixSuggestion | null = this.dartAnalyzer.getQuickFix(dartError);
-            if (!fix) continue;
+            // const fix: QuickFixSuggestion | null = this.dartAnalyzer.getQuickFix(dartError);
+            //  if (!fix) continue;
 
-            const action = new vscode.CodeAction(
-                `Dart Fix: ${fix.title}`,
-                vscode.CodeActionKind.QuickFix
-            );
-            action.diagnostics = [diagnostic];
-            action.isPreferred = fix.kind === 'replace' || fix.kind === 'insert';
+            // const action = new vscode.CodeAction(
+            //     `Dart Fix: ${fix.title}`,
+            //     vscode.CodeActionKind.QuickFix
+            // );
+            // action.diagnostics = [diagnostic];
+            // action.isPreferred = fix.kind === 'replace' || fix.kind === 'insert';
 
-            const docUrl = this.dartAnalyzer.getDocumentationUrl(code);
-            if (docUrl) {
-                action.command = {
-                    title: 'View documentation',
-                    command: 'vscode.open',
-                    arguments: [vscode.Uri.parse(docUrl)],
-                };
-            }
+            // const docUrl = this.dartAnalyzer.getDocumentationUrl(code);
+            // if (docUrl) {
+            //     action.command = {
+            //         title: 'View documentation',
+            //         command: 'vscode.open',
+            //         arguments: [vscode.Uri.parse(docUrl)],
+            //     };
+            // }
 
             // Where we can construct a concrete textual fix, do so; otherwise
             // surface the suggestion as an informational action that opens
             // documentation or shows a message — better than a dead lightbulb.
-            const edit = this._buildEditForFix(document, diagnostic.range, fix);
-            if (edit) {
-                action.edit = edit;
-            } else {
-                action.command = {
-                    title: fix.title,
-                    command: 'dartAI.showQuickFixDetail',
-                    arguments: [fix.title, fix.detail ?? ''],
-                };
-            }
+            // const edit = this._buildEditForFix(document, diagnostic.range, fix);
+            // if (edit) {
+            //     action.edit = edit;
+            // } else {
+            //     action.command = {
+            //         title: fix.title,
+            //         command: 'dartAI.showQuickFixDetail',
+            //         arguments: [fix.title, fix.detail ?? ''],
+            //     };
+            // }
 
-            actions.push(action);
+            // actions.push(action);
         }
 
         return actions;

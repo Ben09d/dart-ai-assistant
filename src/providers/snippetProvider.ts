@@ -1,11 +1,14 @@
 import * as vscode from 'vscode';
 import { LearningEngine } from '../services/learningEngine';
+import { AdvancedLearningEngine } from '../services/advancedLearningEngine';
 
 export class SnippetProvider implements vscode.CompletionItemProvider {
     private learningEngine: LearningEngine;
+    private advancedLearningEngine: AdvancedLearningEngine;
 
-    constructor(learningEngine: LearningEngine) {
+    constructor(learningEngine: LearningEngine, advancedLearningEngine: AdvancedLearningEngine) {
         this.learningEngine = learningEngine;
+        this.advancedLearningEngine = advancedLearningEngine;
     }
 
     provideCompletionItems(
@@ -24,7 +27,9 @@ export class SnippetProvider implements vscode.CompletionItemProvider {
 
         // Add learned snippets
         const learnedPatterns = this.learningEngine.getPreferredPattern('snippet');
-        snippets.push(...this.createLearnedSnippets(learnedPatterns));
+        const advancedLearnedPatterns = this.advancedLearningEngine.getSuggestedPatterns();
+        // snippets.push(...this.createLearnedSnippets(learnedPatterns));
+        // snippets.push(...this.createLearnedSnippets(advancedLearnedPatterns));
 
         return snippets;
     }
@@ -34,62 +39,62 @@ export class SnippetProvider implements vscode.CompletionItemProvider {
             this.createSnippet(
                 'main',
                 'void main() {\n  ${1:// code}\n}',
-                'Main function'
+                'Dart AI'
             ),
             this.createSnippet(
                 'class',
                 'class ${1:ClassName} {\n  ${2:// code}\n}',
-                'Class declaration'
+                'Dart AI'
             ),
             this.createSnippet(
                 'const',
                 'const ${1:variableName} = ${2:value};',
-                'Const variable'
+                'Dart AI'
             ),
             this.createSnippet(
                 'final',
                 'final ${1:variableName} = ${2:value};',
-                'Final variable'
+                'Dart AI'
             ),
             this.createSnippet(
                 'for',
                 'for (var ${1:i} = 0; ${1:i} < ${2:length}; ${1:i}++) {\n  ${3:// code}\n}',
-                'For loop'
+                'Dart AI'
             ),
             this.createSnippet(
                 'foreach',
                 'for (var ${1:item} in ${2:collection}) {\n  ${3:// code}\n}',
-                'For-each loop'
+                'Dart AI'
             ),
             this.createSnippet(
                 'if',
                 'if (${1:condition}) {\n  ${2:// code}\n}',
-                'If statement'
+                'Dart AI'
             ),
             this.createSnippet(
                 'ifelse',
                 'if (${1:condition}) {\n  ${2:// code}\n} else {\n  ${3:// code}\n}',
-                'If-else statement'
+                'Dart AI'
             ),
             this.createSnippet(
                 'switch',
                 'switch (${1:expression}) {\n  case ${2:value}:\n    ${3:// code}\n    break;\n  default:\n    ${4:// code}\n}',
-                'Switch statement'
+                'Dart AI'
             ),
             this.createSnippet(
                 'try',
                 'try {\n  ${1:// code}\n} catch (${2:e}) {\n  ${3:// error handling}\n}',
-                'Try-catch block'
+                'Dart AI'
             ),
             this.createSnippet(
                 'async',
                 'Future<${1:dynamic}> ${2:functionName}() async {\n  ${3:// code}\n  return ${4:result};\n}',
-                'Async function'
+                'Dart AI'
             ),
             this.createSnippet(
                 'test',
                 'test(\'${1:description}\', () {\n  ${2:// test code}\n});',
-                'Test case'
+                'Dart AI '
             ),
             this.createSnippet(
                 'group',
@@ -119,67 +124,67 @@ export class SnippetProvider implements vscode.CompletionItemProvider {
             this.createSnippet(
                 'dispose',
                 '@override\nvoid dispose() {\n  ${1:// cleanup}\n  super.dispose();\n}',
-                'dispose method'
+                'Dart AI '
             ),
             this.createSnippet(
                 'setState',
                 'setState(() {\n  ${1:// update state}\n});',
-                'setState call'
+                'Dart AI'
             ),
             this.createSnippet(
                 'build',
                 '@override\nWidget build(BuildContext context) {\n  return ${1:Container()};\n}',
-                'build method'
+                'Dart AI '
             ),
             this.createSnippet(
                 'scaffold',
                 'Scaffold(\n  appBar: AppBar(\n    title: Text(\'${1:Title}\'),\n  ),\n  body: ${2:Container()},\n)',
-                'Scaffold widget'
+                'Dart AI'
             ),
             this.createSnippet(
                 'container',
                 'Container(\n  ${1:child: ${2:Widget},}\n)',
-                'Container widget'
+                'Dart AI'
             ),
             this.createSnippet(
                 'center',
                 'Center(\n  child: ${1:Widget},\n)',
-                'Center widget'
+                'Dart AI'
             ),
             this.createSnippet(
                 'padding',
                 'Padding(\n  padding: const EdgeInsets.${1:all}(${2:8.0}),\n  child: ${3:Widget},\n)',
-                'Padding widget'
+                'Dart AI'
             ),
             this.createSnippet(
                 'column',
                 'Column(\n  children: [\n    ${1:// widgets}\n  ],\n)',
-                'Column widget'
+                'Dart AI'
             ),
             this.createSnippet(
                 'row',
                 'Row(\n  children: [\n    ${1:// widgets}\n  ],\n)',
-                'Row widget'
+                'Dart AI'
             ),
             this.createSnippet(
                 'listview',
                 'ListView.builder(\n  itemCount: ${1:items.length},\n  itemBuilder: (context, index) {\n    return ${2:ListTile()};\n  },\n)',
-                'ListView.builder'
+                'Dart AI'
             ),
             this.createSnippet(
                 'gridview',
                 'GridView.builder(\n  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(\n    crossAxisCount: ${1:2},\n  ),\n  itemCount: ${2:items.length},\n  itemBuilder: (context, index) {\n    return ${3:Container()};\n  },\n)',
-                'GridView.builder'
+                'Dart AI'
             ),
             this.createSnippet(
                 'futurebuilder',
                 'FutureBuilder<${1:dynamic}>(\n  future: ${2:futureFunction()},\n  builder: (context, snapshot) {\n    if (snapshot.hasData) {\n      return ${3:Widget};\n    } else if (snapshot.hasError) {\n      return Text(\'Error: \\${snapshot.error}\');\n    }\n    return CircularProgressIndicator();\n  },\n)',
-                'FutureBuilder'
+                'Dart AI'
             ),
             this.createSnippet(
                 'streambuilder',
                 'StreamBuilder<${1:dynamic}>(\n  stream: ${2:stream},\n  builder: (context, snapshot) {\n    if (snapshot.hasData) {\n      return ${3:Widget};\n    }\n    return CircularProgressIndicator();\n  },\n)',
-                'StreamBuilder'
+                'Dart AI'
             )
         ];
     }
@@ -191,7 +196,7 @@ export class SnippetProvider implements vscode.CompletionItemProvider {
                 vscode.CompletionItemKind.Snippet
             );
             item.insertText = new vscode.SnippetString(pattern);
-            item.detail = 'Learned pattern';
+            item.detail = 'Learned pattern - Dart AI';
             item.documentation = new vscode.MarkdownString(
                 `Pattern learned from your coding style:\n\n\`\`\`dart\n${pattern}\n\`\`\``
             );
@@ -215,8 +220,8 @@ export class SnippetProvider implements vscode.CompletionItemProvider {
 
     private isFlutterFile(document: vscode.TextDocument): boolean {
         const text = document.getText();
-        return text.includes('import \'package:flutter/') || 
-               text.includes('extends StatelessWidget') ||
-               text.includes('extends StatefulWidget');
+        return text.includes('import \'package:flutter/') ||
+            text.includes('extends StatelessWidget') ||
+            text.includes('extends StatefulWidget');
     }
 }

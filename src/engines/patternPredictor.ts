@@ -570,8 +570,10 @@ export class PatternPredictor {
         );
         const context = document.getText(contextRange).trim();
         const rawPredictions = this.learningEngine.predictNextPattern(context);
+        const advancedRawPredicitons = this.advancedLearningEngine.getSuggestedPatterns();
+        const totalRawPredictions = rawPredictions || advancedRawPredicitons;
 
-        return rawPredictions.slice(0, 5).map((pattern, index) => ({
+        return totalRawPredictions.slice(0, 5).map((pattern, index) => ({
             pattern,
             confidence: Math.max(0, 0.95 - index * 0.12),
             context,
@@ -706,7 +708,7 @@ export class PatternPredictor {
         warnings: number,
         infos: number
     ): string {
-        const parts: string[] = [`Health: ${score}/100 (${grade}).`];
+        const parts: string[] = [`Health: ${score}/100 | Grade: ${grade}.`];
         if (errors > 0) parts.push(`${errors} error${errors > 1 ? 's' : ''} need immediate attention.`);
         if (warnings > 0) parts.push(`${warnings} warning${warnings > 1 ? 's' : ''} should be reviewed.`);
         if (infos > 0) parts.push(`${infos} suggestion${infos > 1 ? 's' : ''} for improvement.`);

@@ -114,7 +114,7 @@ export class SecurityScanner {
         const issues: SecurityIssue[] = [];
 
         const weakAlgorithms = ['MD5', 'SHA1', 'DES', 'RC4'];
-        
+
         for (const algo of weakAlgorithms) {
             if (line.includes(algo)) {
                 issues.push({
@@ -133,7 +133,7 @@ export class SecurityScanner {
     private checkPathTraversal(line: string, lineNumber: number): SecurityIssue[] {
         const issues: SecurityIssue[] = [];
 
-        if ((line.includes('File(') || line.includes('Directory(')) && 
+        if ((line.includes('File(') || line.includes('Directory(')) &&
             (line.includes('$') || line.includes('+'))) {
             issues.push({
                 line: lineNumber,
@@ -334,7 +334,7 @@ export class SecurityScanner {
         </div>
         <p>${issue.message}</p>
         <div class="recommendation">
-            💡 <strong>Recommendation:</strong> ${issue.recommendation}
+            ✅ <strong>Recommendation:</strong> ${issue.recommendation}
         </div>
     </div>
 `;

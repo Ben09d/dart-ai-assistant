@@ -424,9 +424,9 @@ class ErrorHandlingExamples {
     try {
       // Some operation
       throw FormatException('Invalid format');
-    } on FormatException catch (e) {
+      // Unable to auto-fix offline — check Dart docs
       print('Format error: $e');
-    } on IOException catch (e) {
+      // Unable to auto-fix offline — check Dart docs
       print('IO error: $e');
     } catch (e) {
       print('Unknown error: $e');

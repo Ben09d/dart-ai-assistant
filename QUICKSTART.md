@@ -158,7 +158,7 @@ The extension learns your style:
 
 Over time, suggestions become more personalized!
 
-## 💡 Pro Tips
+## ✅ Pro Tips
 
 1. **Save Often**: Auto-formatting happens on save
 2. **Review Fixes**: Always review auto-generated fixes
