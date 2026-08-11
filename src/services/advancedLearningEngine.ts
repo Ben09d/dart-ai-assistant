@@ -51,6 +51,8 @@ interface LearningStats {
     recentPatterns: Pattern[];
 }
 
+const MAX_ADVANCED_PATTERNS = 500;
+
 export class AdvancedLearningEngine {
     private context: vscode.ExtensionContext;
     private patterns: Map<string, Pattern>;
@@ -445,9 +447,27 @@ export class AdvancedLearningEngine {
                     relatedPatterns: [],
                     confidence: 40
                 });
+                this.prunePatterns();
             }
         } catch (error) {
             console.warn('Error recording pattern:', error);
+        }
+    }
+
+    /** Evict the lowest-frequency, oldest patterns once the cap is exceeded. */
+    private prunePatterns(): void {
+        if (this.patterns.size <= MAX_ADVANCED_PATTERNS) return;
+
+        const sorted = Array.from(this.patterns.entries())
+            .sort((a, b) => {
+                const freqDiff = a[1].frequency - b[1].frequency;
+                if (freqDiff !== 0) return freqDiff;
+                return a[1].lastUsed.getTime() - b[1].lastUsed.getTime();
+            });
+
+        const toRemove = sorted.slice(0, this.patterns.size - MAX_ADVANCED_PATTERNS);
+        for (const [key] of toRemove) {
+            this.patterns.delete(key);
         }
     }
 
@@ -671,8 +691,9 @@ export class AdvancedLearningEngine {
                 commonRelationships: Array.from(this.patternRelationships.values())
                     .sort((a, b) => b.coOccurrences - a.coOccurrences)
                     .slice(0, 5),
-                codeSmells: this.detectCodeSmells(vscode.window.activeTextEditor?.document!).slice(0, 5),
-                learningTrend: trend,
+                codeSmells: vscode.window.activeTextEditor
+                    ? this.detectCodeSmells(vscode.window.activeTextEditor.document).slice(0, 5)
+                    : [], learningTrend: trend,
                 suggestedPatterns: this.getSuggestedPatterns(),
                 recentPatterns: recent.slice(0, 5)
             };

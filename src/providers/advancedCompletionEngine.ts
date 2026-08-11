@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { LearningEngine } from '../services/learningEngine';
+import { AdvancedLearningEngine } from '../services/advancedLearningEngine';
 import { AIService } from '../services/aiService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -146,7 +147,7 @@ const DART_SNIPPETS: SnippetDef[] = [
     {
         trigger: 'pop', label: 'PopupMenuButton',
         body: 'PopupMenuButton<String>(\n onSelected: (value) { \n if(value == $1) { \n Navigator.push(\n context,\n MaterialPageRoute(\n builder: (_) => $2(\n index: index,\n $3: Map<dynamic, dynamic>.from($4), \n), \n), \n ).then((_) => setState(() {})); \n } else if (value == $5) { \n Navigator.push( \n context,\n MaterialPageRoute(\n builder: (_) => $6(\n index: $7,\n $8: Map<dynamic, dynamic>.from($9),\n ),\n ),\n ).then((_) => setState(() {}));\n } else if (value == $10) {\n $11;\n  }\n },\n itemBuilder: (BuildContext context) => [\n const PopupMenuItem(value: $12, child: Text($13)),\n const PopupMenuItem(value: $14, child: Text($14)),\n const PopupMenuItem(value: $15, child: Text($16),\n ),\n ],\n ),\n',
-        doc: 'Creates a button that shows a popup menu.', tags: ['futter', 'widget'],
+        doc: 'Creates a button that shows a popup menu.', tags: ['flutter', 'widget'],
     },
     {
         trigger: 'Nav', label: 'Navigator',
@@ -301,6 +302,7 @@ export class AdvancedCompletionEngine {
 
     constructor(
         private readonly learningEngine: LearningEngine,
+        private readonly advancedLearningEngine: AdvancedLearningEngine,
         private readonly aiService: AIService
     ) {
         this.cache = new LRUCache(500);
@@ -334,6 +336,7 @@ export class AdvancedCompletionEngine {
 
         // Sources — ordered so higher-priority sources add first (tiebreak by insertion order)
         candidates.push(...this._learnedCompletions(prefix, ctx));
+        candidates.push(...this._advancedLearnedCompletions(prefix, ctx));
         candidates.push(...this._snippetCompletions(prefix, ctx));
         candidates.push(...this._widgetCompletions(prefix, ctx));
         candidates.push(...this._memberCompletions(prefix, ctx, triggerCharacter));
@@ -406,7 +409,7 @@ export class AdvancedCompletionEngine {
 
     private _learnedCompletions(prefix: string, _ctx: ContextProfile): CompletionCandidate[] {
         if (prefix.trim().length < 2) return [];
-        const patterns = this.learningEngine.getCompletionSuggestions(prefix);
+        const patterns = this.learningEngine.getCompletionSuggestions(prefix, 'dart', 10);
         return patterns.map((p, i) => ({
             text: p, label: p,
             kind: vscode.CompletionItemKind.Text,
@@ -418,6 +421,33 @@ export class AdvancedCompletionEngine {
             source: 'learned' as CompletionSource,
             tags: ['learned'],
         }));
+    }
+
+    /**
+     * Completions from AdvancedLearningEngine's confidence-scored pattern
+     * suggestions — a richer, relationship-aware source distinct from the
+     * simpler LearningEngine patterns above.
+     */
+    private _advancedLearnedCompletions(prefix: string, _ctx: ContextProfile): CompletionCandidate[] {
+        if (prefix.trim().length < 2) return [];
+        const lp = prefix.trim().toLowerCase();
+
+        const suggested = this.advancedLearningEngine.getSuggestedPatterns();
+        return suggested
+            .filter(p => p.pattern.toLowerCase().includes(lp))
+            .slice(0, 5)
+            .map((p, i) => ({
+                text: p.pattern,
+                label: p.pattern,
+                kind: vscode.CompletionItemKind.Text,
+                detail: `Learned pattern — ${p.confidence}% confidence - Dart AI`,
+                documentation: `Used ${p.frequency}× in your code.`,
+                sortText: `0${String(i).padStart(3, '0')}`,
+                score: Math.min(0.95, p.confidence / 100),
+                isSnippet: false,
+                source: 'learned' as CompletionSource,
+                tags: ['learned', 'advanced'],
+            }));
     }
 
     private _snippetCompletions(prefix: string, ctx: ContextProfile): CompletionCandidate[] {

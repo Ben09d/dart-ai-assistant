@@ -189,8 +189,10 @@ class PerformanceAnalyser implements CodeAnalyser {
     analyse(lines: string[], joined: string): CodeRecommendation[] {
         const recs: CodeRecommendation[] = [];
 
-        // Nested loops
-        if (/for\s*[\w(<(]*[^)]*\)\s*\{[^}]*for\s*[\w(<(]/.test(joined)) {
+
+        // Nested loops — brace-aware scan so an unrelated `for` later in the file
+        // (in a different function) doesn't produce a false positive.
+        if (this._hasNestedLoop(lines)) {
             recs.push({
                 id: 'perf-nested-loops',
                 type: 'performance',
@@ -202,8 +204,10 @@ class PerformanceAnalyser implements CodeAnalyser {
             });
         }
 
-        // String concatenation in loop
-        if (/for\s*\([^)]*\)\s*\{[^}]*\+=\s*['"`]/m.test(joined)) {
+        // String concatenation in loop — reuse the same brace-aware helper
+        // (duplicated here since PerformanceAnalyser and StateManagementAnalyser
+        // are separate classes; kept private to each for now).
+        if (this._hasCallInsideLoop(lines, /\+=\s*['"`]/)) {
             recs.push({
                 id: 'perf-string-concat-loop',
                 type: 'performance',
@@ -264,6 +268,66 @@ class PerformanceAnalyser implements CodeAnalyser {
         }
 
         return recs;
+    }
+
+    /**
+     * Detects a `for` loop whose body (bounded by matching braces) contains
+     * another `for` loop — brace-aware, so it won't false-positive on two
+     * unrelated loops in separate, non-nested functions.
+     */
+    private _hasNestedLoop(lines: string[]): boolean {
+        const forLineIndices: number[] = [];
+        for (let i = 0; i < lines.length; i++) {
+            if (/\bfor\s*\(/.test(lines[i])) forLineIndices.push(i);
+        }
+
+        for (const startLine of forLineIndices) {
+            let depth = 0;
+            let sawOpenBrace = false;
+
+            for (let i = startLine; i < lines.length; i++) {
+                for (const ch of lines[i]) {
+                    if (ch === '{') { depth++; sawOpenBrace = true; }
+                    if (ch === '}') depth--;
+                }
+
+                // Once inside the loop body, check for a second `for` before the body closes
+                if (sawOpenBrace && i > startLine && /\bfor\s*\(/.test(lines[i])) {
+                    return true;
+                }
+
+                if (sawOpenBrace && depth <= 0) break; // loop body closed, no nested for found
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Detects whether a `for` loop's body (brace-bounded) contains a call
+     * matching the given pattern — scoped to that loop only, not the whole file.
+     */
+    private _hasCallInsideLoop(lines: string[], callPattern: RegExp): boolean {
+        for (let startLine = 0; startLine < lines.length; startLine++) {
+            if (!/\bfor\s*\(/.test(lines[startLine])) continue;
+
+            let depth = 0;
+            let sawOpenBrace = false;
+
+            for (let i = startLine; i < lines.length; i++) {
+                for (const ch of lines[i]) {
+                    if (ch === '{') { depth++; sawOpenBrace = true; }
+                    if (ch === '}') depth--;
+                }
+
+                if (sawOpenBrace && i > startLine && callPattern.test(lines[i])) {
+                    return true;
+                }
+
+                if (sawOpenBrace && depth <= 0) break;
+            }
+        }
+        return false;
     }
 }
 
@@ -476,15 +540,14 @@ class SecurityAnalyser implements CodeAnalyser {
         return recs;
     }
 }
-
 class StateManagementAnalyser implements CodeAnalyser {
     readonly id = 'stateManagement';
 
-    analyse(_lines: string[], joined: string): CodeRecommendation[] {
+    analyse(lines: string[], joined: string): CodeRecommendation[] {
         const recs: CodeRecommendation[] = [];
 
-        // setState in a loop
-        if (/for\s*\([^)]*\)\s*\{[^}]*setState\s*\(/m.test(joined)) {
+        // setState in a loop — brace-aware scan
+        if (this._hasCallInsideLoop(lines, /setState\s*\(/)) {
             recs.push({
                 id: 'state-setstate-in-loop',
                 type: 'stateManagement',
@@ -496,24 +559,38 @@ class StateManagementAnalyser implements CodeAnalyser {
             });
         }
 
-        // setState after async gap without mounted check
-        if (/await\s+/.test(joined) && /setState\s*\(/.test(joined) && !/if\s*\(\s*mounted\s*\)/.test(joined)) {
-            recs.push({
-                id: 'state-setstate-after-await',
-                type: 'stateManagement',
-                title: 'setState() after async gap without mounted check',
-                description:
-                    'If the widget is disposed between the await and the setState(), this throws a runtime error.',
-                severity: 'error',
-                suggestion: 'Guard with `if (mounted) { setState(() { ... }); }` after every await.',
-                documentationUrl: `${FLUTTER_DOCS_BASE}/development/ui/interactive`,
-                tags: ['flutter', 'state', 'async', 'crash-risk'],
-            });
-        }
-
         return recs;
     }
+
+    /**
+     * Detects whether a `for` loop's body (brace-bounded) contains a call
+     * matching the given pattern — scoped to that loop only, not the whole file.
+     */
+    private _hasCallInsideLoop(lines: string[], callPattern: RegExp): boolean {
+        for (let startLine = 0; startLine < lines.length; startLine++) {
+            if (!/\bfor\s*\(/.test(lines[startLine])) continue;
+
+            let depth = 0;
+            let sawOpenBrace = false;
+
+            for (let i = startLine; i < lines.length; i++) {
+                for (const ch of lines[i]) {
+                    if (ch === '{') { depth++; sawOpenBrace = true; }
+                    if (ch === '}') depth--;
+                }
+
+                if (sawOpenBrace && i > startLine && callPattern.test(lines[i])) {
+                    return true;
+                }
+
+                if (sawOpenBrace && depth <= 0) break;
+            }
+        }
+        return false;
+    }
 }
+
+
 
 // ─── PatternPredictor ─────────────────────────────────────────────────────────
 
@@ -569,15 +646,20 @@ export class PatternPredictor {
             new vscode.Position(Math.min(document.lineCount - 1, position.line + 1), 0)
         );
         const context = document.getText(contextRange).trim();
-        const rawPredictions = this.learningEngine.predictNextPattern(context);
-        const advancedRawPredicitons = this.advancedLearningEngine.getSuggestedPatterns();
-        const totalRawPredictions = rawPredictions || advancedRawPredicitons;
+
+        // Merge string predictions from LearningEngine with pattern text from
+        // AdvancedLearningEngine's suggestions, so both sources contribute.
+        const rawPredictions: string[] = this.learningEngine.predictNextPattern(context);
+        const advancedPredictions: string[] = this.advancedLearningEngine
+            .getSuggestedPatterns()
+            .map(p => p.pattern);
+        const totalRawPredictions = rawPredictions.length > 0 ? rawPredictions : advancedPredictions;
 
         return totalRawPredictions.slice(0, 5).map((pattern, index) => ({
             pattern,
             confidence: Math.max(0, 0.95 - index * 0.12),
             context,
-            alternatives: rawPredictions.slice(index + 1, index + 3),
+            alternatives: totalRawPredictions.slice(index + 1, index + 3),
             reasoning: this._explainPrediction(pattern, context),
         }));
     }

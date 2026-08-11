@@ -40,6 +40,26 @@ export class LearningDashboard {
             totalFixes
         } = stats;
 
+        // Category breakdown: count patterns by their tags, not just raw frequency ranking
+        const categoryCounts = new Map<string, number>();
+        const allPatterns = this.learningEngine.getPatternMetrics().patterns;
+        for (const p of allPatterns.values()) {
+            for (const tag of p.tags) {
+                categoryCounts.set(tag, (categoryCounts.get(tag) ?? 0) + 1);
+            }
+        }
+        const categoryHTML = Array.from(categoryCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([tag, count]) => `
+            <div class="bar-item">
+                <div class="bar-label">${this.escapeHtml(tag)}</div>
+                <div class="bar-container">
+                    <div class="bar-fill" style="width: ${Math.min((count / totalPatterns) * 100, 100)}%">${count}</div>
+                </div>
+            </div>
+        `)
+            .join('');
+
         const patternsHTML = mostUsedPatterns
             .slice(0, 10)
             .map((p: any, i: number) => `
@@ -429,6 +449,16 @@ export class LearningDashboard {
         <h2>🔝 Most Used Patterns</h2>
         <div class="section-content">
             ${patternsHTML || '<p style="color: var(--vscode-descriptionForeground); text-align: center; padding: 20px;">No patterns learned yet. Keep coding!</p>'}
+        </div>
+    </div>
+    <div class="section">
+        <h2>📂 Pattern Categories</h2>
+        <div class="section-content">
+            <div class="chart-container">
+                <div class="bar-chart">
+                    ${categoryHTML || '<p style="color: var(--vscode-descriptionForeground);">No categories yet.</p>'}
+                </div>
+            </div>
         </div>
     </div>
     ` : ''}

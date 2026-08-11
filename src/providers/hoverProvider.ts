@@ -246,12 +246,11 @@ export class HoverProvider implements vscode.HoverProvider {
     }
 
     private _buildUsageSection(word: string): vscode.MarkdownString | undefined {
-        if (!word) return undefined;
+        // Skip short/common words — substring matching against them produces
+        // noisy, unrelated hits (e.g. "id" matching "VillageIdentifier").
+        if (!word || word.length < 4) return undefined;
 
         try {
-            const engineAny = this.learningEngine as any;
-            if (typeof engineAny.getPreferredPatterns !== 'function') return undefined;
-
             const matches = this.learningEngine.getPreferredPattern(word, undefined, 1);
             if (matches.length === 0) return undefined;
 

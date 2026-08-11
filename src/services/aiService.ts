@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import axios from 'axios';
 import * as https from 'https';
 
 export type AITaskType =
@@ -436,14 +435,8 @@ export class AIService {
         return this.call(code, { taskType: 'explain', maxTokens: 600, signal });
     }
 
-    async generateTests(code: string): Promise<string> {
-        const prompt = `Generate comprehensive unit tests for the following Dart code. Include edge cases, error scenarios, and use the test package:
-
-${code}
-
-Generate complete test file with imports.`;
-
-        return await this.callAI(prompt);
+    async generateTests(code: string, signal?: AbortSignal): Promise<string> {
+        return this.call(code, { taskType: 'test', maxTokens: 2000, signal });
     }
 
     async suggestRefactorings(code: string, signal?: AbortSignal): Promise<Refactoring[]> {
@@ -456,16 +449,12 @@ Generate complete test file with imports.`;
         }]);
     }
 
-    async completeCode(document: vscode.TextDocument, position: vscode.Position): Promise<string> {
+    async completeCode(document: vscode.TextDocument, position: vscode.Position, signal?: AbortSignal): Promise<string> {
         const textBeforeCursor = document.getText(
             new vscode.Range(new vscode.Position(0, 0), position)
         );
 
-        const prompt = `Complete the following Dart code intelligently. Return only the completion text that should be inserted:
-
-${textBeforeCursor}`;
-
-        return await this.callAI(prompt);
+        return this.call(textBeforeCursor, { taskType: 'completion', maxTokens: 300, signal });
     }
 
     async documentCode(code: string, signal?: AbortSignal): Promise<string> {
@@ -492,48 +481,6 @@ ${textBeforeCursor}`;
         const payload = `[PREFIX]\n${prefix}\n[SUFFIX]\n${suffix}`;
         const result = await this.call(payload, { taskType: 'completion', maxTokens: 300, signal });
         return result.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 5);
-    }
-
-
-    private async requestAIFix(
-        line: string,
-        context: string,
-        errorMessage: string
-    ): Promise<string | null> {
-        const prompt = `Fix this Dart code error. Return only the corrected line without explanations.
-
-Error: ${errorMessage}
-Line with error: ${line}
-
-Context:
-${context}`;
-
-        try {
-            return await this.callAI(prompt);
-        } catch (error) {
-            // Use VS Code API to report errors instead of console to avoid lib issues
-            const msg = error instanceof Error ? error.message : String(error);
-            vscode.window.showErrorMessage(`Error requesting AI fix: ${msg}`);
-            return null;
-        }
-    }
-
-    private getContextLines(
-        document: vscode.TextDocument,
-        line: number,
-        contextSize: number
-    ): string {
-        const start = Math.max(0, line - contextSize);
-        const end = Math.min(document.lineCount - 1, line + contextSize);
-
-        let context = '';
-        for (let i = start; i <= end; i++) {
-            const lineText = document.lineAt(i).text;
-            const marker = i === line ? '>>> ' : '    ';
-            context += `${marker}${lineText}\n`;
-        }
-
-        return context;
     }
 
     // ── Metrics ────────────────────────────────────────────────────────────────
@@ -714,43 +661,6 @@ ${context}`;
     }
 
 
-    private async callAI(prompt: string): Promise<string> {
-        // If API key is available, use Anthropic API
-        if (this.apiKey) {
-            try {
-                const response = await axios.post(
-                    'https://api.anthropic.com/v1/messages',
-                    {
-                        model: 'claude-sonnet-4-20250514',
-                        max_tokens: 2000,
-                        messages: [{
-                            role: 'user',
-                            content: prompt
-                        }]
-                    },
-                    {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-api-key': this.apiKey,
-                            'anthropic-version': '2023-06-01'
-                        }
-                    }
-                );
-
-                return response.data.content[0].text;
-            } catch (error) {
-                // Use VS Code API to report errors instead of console to avoid lib issues
-                const msg = error instanceof Error ? error.message : String(error);
-                vscode.window.showErrorMessage(`Anthropic API error: ${msg}`);
-
-                // Fallback to built-in logic
-            }
-        }
-
-        // Built-in AI logic (pattern-based) when API is not available
-        return this.builtInAI(prompt);
-    }
-
     private _hash(str: string): string {
         let h = 0;
         for (let i = 0; i < Math.min(str.length, 500); i++) {
@@ -792,69 +702,10 @@ ${context}`;
             this.responseTimes.reduce((a, b) => a + b, 0) / this.responseTimes.length;
     }
 
-    private builtInAI(prompt: string): string {
-        // Simple pattern-based responses for common scenarios
-        if (prompt.includes('Fix this Dart code error')) {
-            return this.patternBasedFix(prompt);
-        } else if (prompt.includes('Optimize')) {
-            return this.patternBasedOptimization(prompt);
-        } else if (prompt.includes('Explain')) {
-            return 'This code performs operations based on Dart best practices. Consider reviewing Dart documentation for more details.';
-        } else if (prompt.includes('Generate comprehensive unit tests')) {
-            return this.generateBasicTests(prompt);
-        } else if (prompt.includes('Complete the following Dart code')) {
-            return this.smartCompletion(prompt);
-        }
 
-        return 'Unable to process request. Please provide an API key for advanced features.';
-    }
 
-    private patternBasedFix(prompt: string): string {
-        // Extract common error patterns and provide fixes
-        if (prompt.includes('Undefined name') || prompt.includes('undefined')) {
-            return 'var undefined = null; // TODO: Define this variable';
-        } else if (prompt.includes('missing semicolon') || prompt.includes('Expected')) {
-            return 'Line with added semicolon;';
-        } else if (prompt.includes('type')) {
-            return 'dynamic value = ...; // Consider adding explicit type';
-        }
-        return 'Corrected code line';
-    }
 
-    private patternBasedOptimization(code: string): string {
-        // Basic optimization patterns
-        let optimized = code;
 
-        // Replace var with explicit types where possible
-        optimized = optimized.replace(/var (\w+) = "([^"]*)"/g, 'String $1 = "$2"');
-        optimized = optimized.replace(/var (\w+) = (\d+)/g, 'int $1 = $2');
-        optimized = optimized.replace(/var (\w+) = (\d+\.\d+)/g, 'double $1 = $2');
-
-        return optimized;
-    }
-
-    private generateBasicTests(prompt: string): string {
-        return `import 'package:test/test.dart';
-
-void main() {
-  group('Test Group', () {
-    test('Basic test', () {
-      // Arrange
-      final expected = true;
-      
-      // Act
-      final actual = true;
-      
-      // Assert
-      expect(actual, equals(expected));
-    });
-    
-    test('Edge case test', () {
-      expect(() => someFunction(), throwsA(isA<Exception>()));
-    });
-  });
-}`;
-    }
 
     private _parseJSON<T>(raw: string, fallback: T): T {
         try {
@@ -865,25 +716,5 @@ void main() {
         }
     }
 
-    private smartCompletion(prompt: string): string {
-        const code = prompt.split('Complete the following Dart code')[1] || '';
 
-        // Detect context and provide smart completions
-        if (code.includes('class ') && code.includes('{') && !code.includes('}')) {
-            return `
-  // Constructor
-  ClassName() {
-    // Initialize
-  }
-  
-  // Methods will go here
-}`;
-        } else if (code.includes('Future<') || code.includes('async')) {
-            return ' async {\n  // Async operation\n  return result;\n}';
-        } else if (code.includes('if (') && !code.includes('{')) {
-            return ' {\n  // Condition body\n}';
-        }
-
-        return '// TODO: Complete implementation';
-    }
 }

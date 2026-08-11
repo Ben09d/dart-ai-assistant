@@ -25,8 +25,8 @@ export class CodePredictionEngine {
     private linePatterns: Map<string, string[]>;
     private functionPatterns: Map<string, string[]>;
     private blockPatterns: Map<string, string[]>;
-    private maxSequences: number = 999999999999999999999999999999999999999;
-    private minConfidence: number = 0.6;
+    private maxSequences: number = 300;
+    private minConfidence: number = 60;
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -287,20 +287,15 @@ export class CodePredictionEngine {
      */
     private predictWithContext(context: PredictionContext): string[] {
         try {
-            const predictions: string[] = [];
-
-            // Predict based on current line
+            // Predict based on current line, then indent to match context
             const basePredictions = this.predictNextLine(context.currentLine);
-            predictions.push(...basePredictions);
-
-            // Adjust indent for predictions
             const indent = '  '.repeat(context.indentLevel);
             const adjustedPredictions = basePredictions.map(p => indent + p);
 
             // Handle closing braces/brackets
             if (context.currentLine.includes('{') && !context.currentLine.includes('}')) {
                 const closingBrace = '}'.repeat((context.currentLine.match(/{/g) || []).length);
-                predictions.push(indent + closingBrace);
+                adjustedPredictions.push(indent + closingBrace);
             }
 
             return adjustedPredictions.slice(0, 5);
@@ -499,11 +494,12 @@ export class CodePredictionEngine {
      * Get prediction statistics
      */
     getStatistics() {
+        const memoryMB = (this.codeSequences.size * 500) / 1024 / 1024;
         return {
             totalSequences: this.codeSequences.size,
             totalFunctionPatterns: this.functionPatterns.size,
             totalBlockPatterns: this.blockPatterns.size,
-            memoryEstimate: `${(this.codeSequences.size * 500) / 1024 / 1024} MB`
+            memoryEstimate: `${memoryMB.toFixed(2)} MB`
         };
     }
 

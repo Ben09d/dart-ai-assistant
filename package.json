@@ -2,7 +2,7 @@
   "name": "dart-ai-assistant",
   "displayName": "Dart AI Assistant",
   "description": "Advanced AI-powered Dart assistant with auto-correction, learning ability, security analysis, and intelligent code suggestions",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "publisher": "a-i-0-studio",
   "repository": {
     "type": "git",
@@ -78,6 +78,10 @@
         "title": "Dart AI: Show Prediction Statistics"
       },
       {
+        "command": "dartAI.searchPatterns",
+        "title": "Dart AI: Search Patterns (debug)"
+      },
+      {
         "command": "dartAI.importProjectForLearning",
         "title": "Dart AI: Import Project for Learning"
       },
@@ -108,10 +112,6 @@
       {
         "command": "dartAI.knowledgeStats",
         "title": "Dart AI: Knowledge Base Statistics"
-      },
-      {
-        "command": "dartAI.exportKnowledge",
-        "title": "Dart AI: Export Knowledge Base"
       },
       {
         "command": "dartAI.importKnowledge",

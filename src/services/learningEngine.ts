@@ -251,19 +251,40 @@ export class LearningEngine {
             const rawLocalSignals = this.context.globalState.get<Record<string, any>>('localMarketSignals');
             const rawSessionHistory = this.context.globalState.get<SessionSnapshot[]>('sessionHistory');
 
-
             if (rawPatterns) {
+                let repairedCount = 0;
                 this.patterns = new Map(
-                    Object.entries(rawPatterns).map(([k, v]) => [
-                        k,
-                        {
-                            ...v,
-                            lastUsed: new Date(v.lastUsed),
-                            fileTypes: new Set<string>(v.fileTypes ?? []),
-                            tags: new Set<string>(v.tags ?? []),
-                        } as CodingPattern,
-                    ])
+                    Object.entries(rawPatterns).map(([k, v]) => {
+                        let tags = new Set<string>(v.tags ?? []);
+                        let fileTypes = new Set<string>(v.fileTypes ?? []);
+
+                        // Self-heal: if tags/fileTypes are empty (corrupted by the old
+                        // broken save path), re-derive tags from the pattern's own key
+                        // prefix (e.g. "try_block:..." -> infer ["error-handling"]).
+                        if (tags.size === 0) {
+                            tags = this._inferTagsFromKey(k);
+                            repairedCount++;
+                        }
+                        if (fileTypes.size === 0) {
+                            fileTypes = new Set<string>(['dart']);
+                        }
+
+                        return [
+                            k,
+                            {
+                                ...v,
+                                lastUsed: new Date(v.lastUsed),
+                                fileTypes,
+                                tags,
+                            } as CodingPattern,
+                        ];
+                    })
                 );
+
+                if (repairedCount > 0) {
+                    console.warn(`[LearningEngine] Repaired ${repairedCount} pattern(s) with corrupted tags from a previous version.`);
+                    this.scheduleSave(); // persist the repair so it doesn't need to re-run every load
+                }
             }
 
             if (rawPrefs) this.preferences = rawPrefs;
@@ -392,6 +413,30 @@ export class LearningEngine {
             if (/\bextends\s+StatefulWidget/.test(line)) this.upsertPattern('stateful_widget_def', line, ctx, ext, ['widget', 'state']);
             if (/\bfactory\s+\w+/.test(line)) this.upsertPattern('factory_constructor', line, ctx, ext, ['pattern']);
             if (/\bconst\s+\w+\s*=\s*\[/.test(line)) this.upsertPattern('const_list', line, ctx, ext, ['const']);
+
+            // Error handling
+            if (/\btry\s*\{/.test(line)) this.upsertPattern('try_block', line, ctx, ext, ['error-handling']);
+            if (/\bcatch\s*\(/.test(line)) this.upsertPattern('catch_block', line, ctx, ext, ['error-handling']);
+            if (/\bfinally\s*\{/.test(line)) this.upsertPattern('finally_block', line, ctx, ext, ['error-handling']);
+            if (/\bthrow\s+\w/.test(line)) this.upsertPattern('throw_statement', line, ctx, ext, ['error-handling']);
+
+            // Null safety
+            if (/\?\./.test(line)) this.upsertPattern('null_aware_access', line, ctx, ext, ['null-safety']);
+            if (/\?\?/.test(line)) this.upsertPattern('null_coalescing', line, ctx, ext, ['null-safety']);
+            if (/!\./.test(line)) this.upsertPattern('non_null_assertion', line, ctx, ext, ['null-safety']);
+
+            // Constructors
+            if (/^\s*\w+\.\w+\s*\(/.test(line) && line.includes('this.')) this.upsertPattern('named_constructor', line, ctx, ext, ['oop', 'constructor']);
+
+            // Extension methods
+            if (/\bextension\s+\w+\s+on\s+\w+/.test(line)) this.upsertPattern('extension_method', line, ctx, ext, ['extension']);
+
+            // Enums
+            if (/\benum\s+\w+/.test(line)) this.upsertPattern('enum_definition', line, ctx, ext, ['enum']);
+
+            // Mixins
+            if (/\bmixin\s+\w+/.test(line)) this.upsertPattern('mixin_definition', line, ctx, ext, ['mixin']);
+            if (/\bwith\s+\w+/.test(line)) this.upsertPattern('mixin_usage', line, ctx, ext, ['mixin']);
         }
 
         // Prune low-value patterns when we exceed the cap
@@ -474,16 +519,7 @@ export class LearningEngine {
     }
 
 
-    private async saveLearningData() {
-        try {
-            await this.context.globalState.update('codingPatterns', Object.fromEntries(this.patterns));
-            await this.context.globalState.update('userPreferences', this.preferences);
-            await this.context.globalState.update('fixHistory', this.fixHistory);
-        } catch (error) {
-            console.warn('Error saving learning data:', error);
-            // Don't throw - just log and continue
-        }
-    }
+
 
 
     // ── Clustering ────────────────────────────────────────────────────────────
@@ -652,23 +688,25 @@ export class LearningEngine {
                 try {
                     const line = lines[i];
 
+                    const ext = document.fileName.split('.').pop() ?? 'unknown';
+
                     if (line.includes('class ')) {
-                        this.recordPattern('class_structure', line, text, this.getContext(lines, i));
+                        this.recordPattern('class_structure', line, ext, this.getContext(lines, i));
                     }
 
                     if (line.includes('Future<')) {
-                        this.recordPattern('async_pattern', line, text, this.getContext(lines, i));
+                        this.recordPattern('async_pattern', line, ext, this.getContext(lines, i));
                     }
 
                     if (line.includes('setState(')) {
-                        this.recordPattern('state_management', line, text, this.getContext(lines, i));
+                        this.recordPattern('state_management', line, ext, this.getContext(lines, i));
                     }
                 } catch (error) {
                     console.warn('Error analyzing line:', error);
                 }
             }
 
-            await this.saveLearningData();
+            this.scheduleSave();
         } catch (error) {
             console.warn('Error in analyzePatterns:', error);
         }
@@ -695,17 +733,16 @@ export class LearningEngine {
                 this.fixHistory = this.fixHistory.slice(-100);
             }
 
-            this.saveLearningData().catch(error => {
-                console.warn('Error saving fix history:', error);
-            });
+            this.scheduleSave();
         } catch (error) {
             console.warn('Error in recordFix:', error);
         }
     }
 
     getSimilarFix(errorMessage: string): string | null {
-        // Find similar errors in history
-        for (const history of this.fixHistory.reverse()) {
+        // Find similar errors in history, most recent first (without mutating the array)
+        for (let i = this.fixHistory.length - 1; i >= 0; i--) {
+            const history = this.fixHistory[i];
             if (this.calculateSimilarity(errorMessage, history.error) > 0.7) {
                 return history.fix;
             }
@@ -724,14 +761,14 @@ export class LearningEngine {
             .slice(0, limit);
     }
 
-    getCompletionSuggestions(prefix: string): string[] {
+    getCompletionSuggestions(prefix: string, fileType?: string, limit = 10): string[] {
         const suggestions: string[] = [];
 
-        // Get patterns that match the prefix
+        // Get patterns that match the prefix (and file type, if specified)
         for (const [key, pattern] of this.patterns) {
-            if (pattern.pattern.startsWith(prefix)) {
-                suggestions.push(pattern.pattern);
-            }
+            if (!pattern.pattern.startsWith(prefix)) continue;
+            if (fileType && !pattern.fileTypes.has(fileType)) continue;
+            suggestions.push(pattern.pattern);
         }
 
         // Sort by frequency
@@ -741,7 +778,7 @@ export class LearningEngine {
             return freqB - freqA;
         });
 
-        return suggestions.slice(0, 10);
+        return suggestions.slice(0, limit);
     }
 
     private learnStructurePattern(text: string) {
@@ -829,6 +866,39 @@ export class LearningEngine {
             });
         }
     }
+
+    /** Best-effort tag recovery for patterns whose tags were lost to a prior storage bug. */
+    private _inferTagsFromKey(key: string): Set<string> {
+        const type = key.split(':')[0] ?? '';
+        const map: Record<string, string[]> = {
+            class_structure: ['oop'],
+            async_future: ['async'],
+            stream_pattern: ['async', 'reactive'],
+            stateful_widget: ['state', 'widget'],
+            provider_pattern: ['state', 'di'],
+            bloc_builder: ['state', 'bloc'],
+            riverpod_pattern: ['state', 'riverpod'],
+            stateless_widget: ['widget'],
+            stateful_widget_def: ['widget', 'state'],
+            factory_constructor: ['pattern'],
+            const_list: ['const'],
+            try_block: ['error-handling'],
+            catch_block: ['error-handling'],
+            finally_block: ['error-handling'],
+            throw_statement: ['error-handling'],
+            null_aware_access: ['null-safety'],
+            null_coalescing: ['null-safety'],
+            non_null_assertion: ['null-safety'],
+            named_constructor: ['oop', 'constructor'],
+            extension_method: ['extension'],
+            enum_definition: ['enum'],
+            mixin_definition: ['mixin'],
+            mixin_usage: ['mixin'],
+        };
+        return new Set(map[type] ?? ['general']);
+    }
+
+
 
     private getContext(lines: string[], index: number): string {
         return lines.slice(Math.max(0, index - 2), Math.min(lines.length, index + 3)).join('\n');

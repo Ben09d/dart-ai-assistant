@@ -264,6 +264,7 @@ function getAdvancedCompletionEngine(context: vscode.ExtensionContext): Advanced
     if (!advancedCompletionEngine) {
         advancedCompletionEngine = new AdvancedCompletionEngine(
             getLearningEngine(context),
+            getAdvancedLearningEngine(context),
             getAIService(context)
         );
     }
@@ -1467,6 +1468,43 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
                 }
             })
         );
+        // ======================================================================
+        // SEARCH PATTERNS — debug/verify what's actually been learned
+        // ======================================================================
+        context.subscriptions.push(
+            vscode.commands.registerCommand('dartAI.searchPatterns', async () => {
+                const query = await vscode.window.showInputBox({
+                    prompt: 'Search learned patterns (leave empty to list ALL keys)',
+                    placeHolder: 'try_block',
+                });
+
+                const metrics = getLearningEngine(context).getPatternMetrics();
+                const allKeys = Array.from(metrics.patterns.keys());
+
+                if (!query) {
+                    console.warn('[searchPatterns] ALL KEYS:', allKeys);
+                    vscode.window.showInformationMessage(`Logged all ${allKeys.length} keys to console. Check Debug Console.`);
+                    return;
+                }
+
+                const matches = Array.from(metrics.patterns.entries())
+                    .filter(([key]) => key.toLowerCase().includes(query.toLowerCase()));
+
+                if (matches.length === 0) {
+                    vscode.window.showInformationMessage(`No patterns found matching "${query}". Total patterns stored: ${metrics.totalPatterns}`);
+                    return;
+                }
+
+                const message = matches
+                    .map(([key, p]) => `${key} — frequency: ${p.frequency}`)
+                    .join('\n');
+                vscode.window.showInformationMessage(`Found ${matches.length} match(es):\n${message}`);
+            })
+        );
+
+        // ======================================================================
+        // IMPORT PROJECT FOR LEARNING — train instantly from an existing project
+        // ======================================================================
 
         // ======================================================================
         // IMPORT PROJECT FOR LEARNING — train instantly from an existing project
@@ -1779,8 +1817,8 @@ function setupLearningWatchers(context: vscode.ExtensionContext) {
                 try {
                     if (document.languageId !== 'dart') return;
 
-                    // Basic engine
-                    getLearningEngine(context).analyzePatterns(document);
+                    // Basic engine (rich pattern detection: classes, async, state mgmt, widgets)
+                    await getLearningEngine(context).analyzeDocument(document);
 
                     // ADVANCED: Analyze with advanced engine
                     const advEngine = getAdvancedLearningEngine(context);
