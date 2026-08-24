@@ -461,14 +461,14 @@ export class DartAnalyzer {
         const trimmed = line.trim();
 
         // Skip control-flow keywords that look like function declarations
-        if (/^(|for|late|return|while|switch|rethrow|catch|on|try)\b/.test(trimmed)) return false;
+        if (/^(if|else|for|late|return|while|switch|rethrow|catch|on|try)\b/.test(trimmed)) return false;
 
         // Check if this is a function declaration with return type
         const functionMatch = trimmed.match(/(\w+)\s+(\w+)\s*\([^)]*\)\s*{/);
         if (!functionMatch) return false;
 
         const returnType = functionMatch[1];
-        if (returnType === 'void' || returnType === 'Future' || returnType === 'else if' || returnType === '}') return false;
+        if (returnType === 'void' || returnType === 'Future' ) return false;
 
         // Check if function has a return statement
         let braceCount = 1;

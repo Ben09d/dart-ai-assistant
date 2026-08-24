@@ -2,7 +2,7 @@
 
 All notable changes to the "Dart AI Assistant" extension will be documented in this file.
 
-## [1.0.9] - 2026
+## [1.0.10] - 2026
 
 The largest release to date — a comprehensive engine-by-engine overhaul covering learning, prediction, completion, error detection, and AI integration, plus two major new features.
 

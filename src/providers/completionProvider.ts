@@ -47,9 +47,10 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         }
 
         // 3. Learned pattern completions
-        const learnedSuggestions = this.learningEngine.getCompletionSuggestions(currentWord);
-        const advancedLearnedSuggestions = this.advancedLearningEngine.getSuggestedPatterns()
-        completions.push(...this.createCompletionItems(learnedSuggestions || advancedLearnedSuggestions, 'Pattern'));
+        const learnedSuggestions = this.learningEngine.getCompletionSuggestions(currentWord, 'dart', 10);
+        const advancedLearnedSuggestions = this.advancedLearningEngine.getSuggestedPatterns().map(p => p.pattern);
+        const patternSuggestions = learnedSuggestions.length > 0 ? learnedSuggestions : advancedLearnedSuggestions;
+        completions.push(...this.createCompletionItems(patternSuggestions, 'Pattern'));
 
         // 4. AI-powered smart completions
         if (currentWord.length >= 2) {
@@ -64,11 +65,16 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
                 ));
 
                 const aiSuggestions = await this.aiService.generateCompletions(prefix, suffix);
-                completions.push(...this.createCompletionItems(aiSuggestions, 'AI'));
+                // Filter out offline-fallback placeholder text — not genuine suggestions
+                const realSuggestions = aiSuggestions.filter(s =>
+                    !s.includes('TODO: implement') &&
+                    !s.includes('TODO: add members') &&
+                    s.trim().length > 0
+                );
+                completions.push(...this.createCompletionItems(realSuggestions, 'AI'));
             } catch (error) {
-                // Use VS Code API to report errors instead of console to avoid lib issues
                 const msg = error instanceof Error ? error.message : String(error);
-                vscode.window.showErrorMessage(`AI completion error: ${msg}`);
+                console.warn('AI completion error:', msg); // silent — this fires often without an API key, shouldn't spam error popups
             }
         }
 
