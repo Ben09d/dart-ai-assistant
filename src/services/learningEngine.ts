@@ -18,6 +18,8 @@ interface CodingPattern {
     fileTypes: Set<string>;
     /** Tags derived from analysis (e.g. "async", "widget", "state") */
     tags: Set<string>;
+    /** True if the user explicitly taught this pattern via "Learn This Pattern" */
+    userConfirmed?: boolean;
 }
 
 
@@ -276,6 +278,7 @@ export class LearningEngine {
                                 lastUsed: new Date(v.lastUsed),
                                 fileTypes,
                                 tags,
+                                userConfirmed: v.userConfirmed ?? false,
                             } as CodingPattern,
                         ];
                     })
@@ -949,6 +952,50 @@ export class LearningEngine {
         }
 
         return matrix[str2.length][str1.length];
+    }
+
+    /**
+ * Explicitly teach a pattern — user-confirmed patterns get boosted
+ * confidence and are prioritized in completions over passively-learned ones.
+ */
+    learnPatternExplicitly(text: string, fileExtension: string): void {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+
+        const key = `user_taught:${trimmed}`;
+        const existing = this.patterns.get(key);
+
+        if (existing) {
+            existing.frequency++;
+            existing.lastUsed = new Date();
+            existing.userConfirmed = true;
+        } else {
+            this.patterns.set(key, {
+                id: key,
+                pattern: trimmed,
+                frequency: 10, // start high — explicit teaching should rank well immediately
+                context: trimmed,
+                lastUsed: new Date(),
+                score: 100,
+                fileTypes: new Set([fileExtension]),
+                tags: new Set(['user-taught']),
+                userConfirmed: true,
+            });
+        }
+
+        this.scheduleSave();
+    }
+
+    /** Permanently removes a pattern by its exact key. Returns true if it existed. */
+    forgetPattern(key: string): boolean {
+        const existed = this.patterns.delete(key);
+        if (existed) this.scheduleSave();
+        return existed;
+    }
+
+    /** Returns all patterns as [key, pattern] pairs, for building a "forget" picker UI. */
+    getAllPatternEntries(): Array<[string, CodingPattern]> {
+        return Array.from(this.patterns.entries());
     }
 
     getStatistics() {

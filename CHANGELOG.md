@@ -14,6 +14,7 @@ The largest release to date — a comprehensive engine-by-engine overhaul coveri
 - 📂 **Pattern Categories breakdown** on the Learning Dashboard, showing pattern diversity across error-handling, null-safety, state management, and more.
 - 🧠 **9 new pattern detectors**: try/catch/finally/throw, null-aware access, null coalescing, non-null assertions, named constructors, extension methods, enums, and mixins.
 - ✨ **AdvancedLearningEngine now contributes to code completions** — confidence-scored, relationship-aware suggestions now appear in the completion dropdown, not just in dashboards.
+- 🧩 **Unified completion provider** — the 4 separate completion sources (basic, snippets, advanced/widgets, predictions) are now merged through a single ranked entry point instead of competing independently, eliminating duplicate suggestions in the dropdown.
 
 ### Fixed — Architecture
 - Consolidated three overlapping error-detection systems into clear ownership: DartAnalyzer owns the Problems panel, ErrorPrevention/PatternPredictor own reports and the status bar — eliminating duplicate/contradictory error counts.
@@ -53,13 +54,19 @@ The largest release to date — a comprehensive engine-by-engine overhaul coveri
 ### Fixed — Completion Engine
 - Fixed `getCompletionSuggestions()` calls to properly filter by file type.
 - Fixed a typo in snippet tagging.
+- Fixed offline-fallback placeholder text (e.g. `// TODO: implement`) leaking directly into the completion dropdown and getting inserted into code when no Anthropic API key is configured.
+- Fixed a type mismatch between string-based and object-based pattern sources that meant the fallback pattern source was silently unreachable.
+- Replaced an error popup that could fire on nearly every keystroke (when typing without an API key configured) with silent logging.
+
+### Fixed — Dart Analyzer
+- Fixed a regression in the missing-return-statement check where `if`/`else` had been dropped from the control-flow keyword skip list, causing false "Missing return statement" errors on `else if` blocks.
 
 ### Fixed — Formatting & Detection (carried over from mid-cycle testing)
 - Fixed auto-formatter re-triggering itself on save, which could cause spacing to grow unpredictably across repeated saves.
 - Fixed several false-positive error detections: indented comments, ternary expressions, block comments (`/* */`), `@override` annotations, generic type declarations, `catch`/`on` blocks being misread as function declarations, and Flutter/Dart package imports being flagged as unused.
 - Fixed a double-activation bug caused by a deprecated `vscode` npm package conflicting with `@types/vscode`.
 
-## [1.0.0] - 2024-02-14
+## [1.0.0] - 2026-07-10
 
 ### Added
 - 🎉 Initial release of Dart AI Assistant

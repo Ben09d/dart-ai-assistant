@@ -61,7 +61,7 @@ import { AdvancedLearningEngine } from './services/advancedLearningEngine';
 import { LearningNotifications } from './services/learningNotifications';
 import { CodePredictionEngine } from './services/codePredictionEngine';
 import { PredictiveCompletionProvider, PredictiveInlineProvider, PredictionStatusBar } from './providers/predictiveCompletionProvider';
-import { ErrorPrevention } from './engines/errorPrevention';
+import { UnifiedCompletionProvider } from './providers/unifiedCompletionProvider'; import { ErrorPrevention } from './engines/errorPrevention';
 import { AdvancedCompletionEngine } from './providers/advancedCompletionEngine';
 import { AdvancedCompletionAdapter } from './providers/advancedCompletionAdapter';
 import { PatternPredictor } from './engines/patternPredictor';
@@ -354,13 +354,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Register completion provider for intelligent code suggestions
         const completionProvider = new CompletionProvider(getAIService(context), getLearningEngine(context), getAdvancedLearningEngine(context));
-        context.subscriptions.push(
-            vscode.languages.registerCompletionItemProvider(
-                'dart',
-                completionProvider,
-                '.', '(', '{', '[', '<', '"', "'", ' '
-            )
-        );
+        // Registration moved to the single UnifiedCompletionProvider below.
 
         // ── Additive: update health status bar whenever the active editor changes ──
         context.subscriptions.push(
@@ -373,11 +367,9 @@ export async function activate(context: vscode.ExtensionContext) {
             })
         );
 
-        // Register snippet provider
+
+        // Snippet provider — registration moved to the single UnifiedCompletionProvider below.
         const snippetProvider = new SnippetProvider(getLearningEngine(context), getAdvancedLearningEngine(context));
-        context.subscriptions.push(
-            vscode.languages.registerCompletionItemProvider('dart', snippetProvider)
-        );
 
         // ── Additive: register the new commands defined further below ──────────
         // Avoid duplicate registration if commands already exist (prevents
@@ -430,9 +422,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         const advEngine = getAdvancedCompletionEngine(context);
         const advAdapter = new AdvancedCompletionAdapter(advEngine);
-        context.subscriptions.push(
-            vscode.languages.registerCompletionItemProvider('dart', advAdapter, '.', ' ')
-        );
+        // Registration moved to the single UnifiedCompletionProvider below.
 
         // ── Additive: code health status bar (separate from the learning one) ──
         healthStatusBar = vscode.window.createStatusBarItem(
@@ -445,12 +435,24 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
         // ====================================================================
-        // REGISTER PREDICTIVE COMPLETION PROVIDER
+        // REGISTER UNIFIED COMPLETION PROVIDER — single entry point merging
+        // predictions, advanced completions, basic completions, and snippets
         // ====================================================================
         const predictionEngine = getCodePredictionEngine(context);
         const predictiveProvider = new PredictiveCompletionProvider(predictionEngine);
+
+        const unifiedProvider = new UnifiedCompletionProvider(
+            predictiveProvider,
+            advAdapter,
+            completionProvider,
+            snippetProvider
+        );
         context.subscriptions.push(
-            vscode.languages.registerCompletionItemProvider('dart', predictiveProvider, ' ', '\n')
+            vscode.languages.registerCompletionItemProvider(
+                'dart',
+                unifiedProvider,
+                '.', '(', '{', '[', '<', '"', "'", ' ', '\n'
+            )
         );
 
         // Show prediction stats in status bar
@@ -1468,6 +1470,64 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
                 }
             })
         );
+
+
+
+        // ======================================================================
+        // LEARN THIS PATTERN — explicitly teach a selected code snippet
+        // ======================================================================
+        context.subscriptions.push(
+            vscode.commands.registerCommand('dartAI.learnThisPattern', async () => {
+                const editor = vscode.window.activeTextEditor;
+                if (!editor || editor.document.languageId !== 'dart') {
+                    vscode.window.showErrorMessage('Please open a Dart file');
+                    return;
+                }
+
+                const selectedText = editor.document.getText(editor.selection);
+                if (!selectedText.trim()) {
+                    vscode.window.showErrorMessage('Select some code first, then run this command.');
+                    return;
+                }
+
+                getLearningEngine(context).learnPatternExplicitly(selectedText, 'dart');
+                vscode.window.showInformationMessage('⭐ Pattern learned! It will now be prioritized in suggestions.');
+            })
+        );
+
+        // ======================================================================
+        // FORGET THIS PATTERN — remove a previously learned pattern
+        // ======================================================================
+        context.subscriptions.push(
+            vscode.commands.registerCommand('dartAI.forgetPattern', async () => {
+                const entries = getLearningEngine(context).getAllPatternEntries();
+                if (entries.length === 0) {
+                    vscode.window.showInformationMessage('No patterns learned yet.');
+                    return;
+                }
+
+                const items = entries
+                    .sort((a, b) => b[1].frequency - a[1].frequency)
+                    .slice(0, 50) // cap the picker list for usability
+                    .map(([key, pattern]) => ({
+                        label: pattern.userConfirmed ? `⭐ ${pattern.pattern}` : pattern.pattern,
+                        description: `${pattern.frequency}× used`,
+                        key,
+                    }));
+
+                const selected = await vscode.window.showQuickPick(items, {
+                    placeHolder: 'Select a pattern to forget...',
+                });
+
+                if (!selected) return;
+
+                const removed = getLearningEngine(context).forgetPattern(selected.key);
+                vscode.window.showInformationMessage(
+                    removed ? '🗑️ Pattern forgotten.' : 'Could not remove pattern.'
+                );
+            })
+        );
+
         // ======================================================================
         // SEARCH PATTERNS — debug/verify what's actually been learned
         // ======================================================================

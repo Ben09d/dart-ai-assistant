@@ -75,8 +75,8 @@ export class HoverProvider implements vscode.HoverProvider {
         if (recommendationSection) sections.push(recommendationSection);
 
         // 4) LearningEngine usage stats for the hovered symbol, if recognisable.
-        const usageSection = this._buildUsageSection(word);
-        if (usageSection) sections.push(usageSection);
+        // Usage stats intentionally not shown in hover — kept as internal
+        // data only (see _buildUsageSection, currently unused here).
 
         // 5) Widget/keyword documentation blurb for common Flutter/Dart symbols —
         //    a lightweight fallback so hovering still shows *something* useful

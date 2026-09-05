@@ -291,6 +291,7 @@ export class DartAnalyzer {
             trimmed.endsWith(')') ||    // ← ADD: Skip closing parens
             trimmed.endsWith('=') ||
             trimmed.endsWith('&&') ||
+            trimmed.endsWith('||') ||
             trimmed.startsWith('static') ||
             trimmed.startsWith('if ') ||   // ← ADD: Skip if/for/while
             trimmed.startsWith('for ') ||
@@ -461,14 +462,15 @@ export class DartAnalyzer {
         const trimmed = line.trim();
 
         // Skip control-flow keywords that look like function declarations
-        if (/^(if|else|for|late|return|while|switch|rethrow|catch|on|try)\b/.test(trimmed)) return false;
-
+        // (strip a leading '}' first, since "} else if (...)" is common)
+        const withoutLeadingBrace = trimmed.replace(/^\}\s*/, '');
+        if (/^(if|else|for|late|return|while|switch|rethrow|catch|on|try)\b/.test(withoutLeadingBrace)) return false;
         // Check if this is a function declaration with return type
         const functionMatch = trimmed.match(/(\w+)\s+(\w+)\s*\([^)]*\)\s*{/);
         if (!functionMatch) return false;
 
         const returnType = functionMatch[1];
-        if (returnType === 'void' || returnType === 'Future' ) return false;
+        if (returnType === 'void' || returnType === 'Future') return false;
 
         // Check if function has a return statement
         let braceCount = 1;

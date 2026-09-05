@@ -78,6 +78,14 @@
         "title": "Dart AI: Show Prediction Statistics"
       },
       {
+        "command": "dartAI.learnThisPattern",
+        "title": "Dart AI: Learn This Pattern"
+      },
+      {
+        "command": "dartAI.forgetPattern",
+        "title": "Dart AI: Forget Pattern"
+      },
+      {
         "command": "dartAI.searchPatterns",
         "title": "Dart AI: Search Patterns (debug)"
       },
@@ -126,6 +134,20 @@
         "when": "editorTextFocus && editorLangId == dart"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "dartAI.learnThisPattern",
+          "when": "editorTextFocus && editorLangId == dart && editorHasSelection",
+          "group": "dartAI@1"
+        },
+        {
+          "command": "dartAI.explainCode",
+          "when": "editorTextFocus && editorLangId == dart && editorHasSelection",
+          "group": "dartAI@2"
+        }
+      ]
+    },
     "configuration": {
       "title": "Dart AI Assistant",
       "properties": {

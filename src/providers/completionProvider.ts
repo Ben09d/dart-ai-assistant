@@ -280,12 +280,21 @@ export class CompletionProvider implements vscode.CompletionItemProvider {
         return item;
     }
 
-    private createCompletionItems(suggestions: string[], source: string): vscode.CompletionItem[] {
-        return suggestions.map(suggestion => {
-            const item = new vscode.CompletionItem(suggestion, vscode.CompletionItemKind.Text);
-            item.detail = `${source} suggestion`;
-            return item;
-        });
+    private createCompletionItems(
+        suggestions: string[],
+        source: string,
+        range?: vscode.Range
+    ): vscode.CompletionItem[] {
+        return suggestions
+            .filter(suggestion => !suggestion.includes('\n')) // exclude multi-line pattern text — never safe to insert as a single completion
+            .map(suggestion => {
+                const label = suggestion.length > 60 ? suggestion.slice(0, 60) + '…' : suggestion;
+                const item = new vscode.CompletionItem(label, vscode.CompletionItemKind.Text);
+                item.detail = `${source} suggestion`;
+                item.insertText = suggestion;
+                if (range) item.range = range;
+                return item;
+            });
     }
 
     private getCurrentWord(document: vscode.TextDocument, position: vscode.Position): string {

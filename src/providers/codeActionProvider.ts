@@ -69,7 +69,6 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
         actions.push(...await this._actionsFromErrorPrevention(document, range));
 
         if (token.isCancellationRequested) return actions;
-
         // 3) Actions from PatternPredictor recommendations relevant to this line.
         actions.push(...this._actionsFromPatternPredictor(document, range));
 
@@ -79,8 +78,43 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
             actions.push(this._buildFixAllAction(document));
         }
 
+        // 5) Learn/Forget actions — only when the user has an actual text
+        //    selection (not just a cursor position), matching the same
+        //    condition as the right-click menu entry.
+        if (!range.isEmpty) {
+            actions.push(this._buildLearnPatternAction(document, range));
+            actions.push(this._buildForgetPatternAction(document, range));
+        }
+
         return actions;
     }
+
+    /** Lightbulb action offering to explicitly teach the selected code as a pattern. */
+    private _buildLearnPatternAction(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction {
+        const action = new vscode.CodeAction(
+            '⭐ Dart AI: Learn This Pattern',
+            vscode.CodeActionKind.Empty
+        );
+        action.command = {
+            title: 'Learn This Pattern',
+            command: 'dartAI.learnThisPattern',
+        };
+        return action;
+    }
+
+    /** Lightbulb action opening the "forget a pattern" picker, scoped near the selection. */
+    private _buildForgetPatternAction(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction {
+        const action = new vscode.CodeAction(
+            '🗑️ Dart AI: Forget a Pattern',
+            vscode.CodeActionKind.Empty
+        );
+        action.command = {
+            title: 'Forget a Pattern',
+            command: 'dartAI.forgetPattern',
+        };
+        return action;
+    }
+
 
     /**
      * Optional VS Code hook: lazily resolves the edit for an action only
