@@ -13,28 +13,12 @@ export function registerKnowledgeBaseCommands(
     // ═══════════════════════════════════════════════════════════════
     // ADD KNOWLEDGE FROM VARIOUS SOURCES
     // ═══════════════════════════════════════════════════════════════
-
-    // Add from URL (tutorial, docs, article)
+    // Add from URL (tutorial, docs, article) — not yet implemented
     context.subscriptions.push(
         vscode.commands.registerCommand('dartAI.addKnowledgeFromUrl', async () => {
-            const url = await vscode.window.showInputBox({
-                prompt: 'Enter URL (GitHub link, blog post, documentation, etc.)',
-                placeHolder: 'https://example.com/dart-tutorial',
-                ignoreFocusOut: true
-            });
-
-            if (!url) return;
-
-            const category = await vscode.window.showQuickPick(
-                ['firebase', 'flutter', 'dart', 'uganda-patterns', 'storage', 'networking', 'general'],
-                { placeHolder: 'Category for this knowledge' }
+            vscode.window.showInformationMessage(
+                '📅 Importing from URLs is coming in a future update. For now, use "Add Knowledge from File" or "Add Knowledge from Clipboard" instead.'
             );
-
-            if (!category) return;
-
-            vscode.window.showInformationMessage('Importing knowledge...');
-            await knowledgeBase.addFromUrl(url, category);
-            vscode.window.showInformationMessage('✓ Knowledge added to base!');
         })
     );
 

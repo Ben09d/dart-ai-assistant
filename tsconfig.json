@@ -9,7 +9,7 @@
     ],
     "types": [
       "node",
-      "vscode"
+      "jest"
     ],
     "sourceMap": true,
     "rootDir": "src",

@@ -25,31 +25,18 @@ export class KnowledgeBaseManager {
         this.dbPath = dbPath;
         this.ensureDbExists();
     }
-
     /**
      * Add knowledge from external sources
      * Sources: tutorials, docs, GitHub repos, Medium articles, YouTube transcripts, etc.
+     *
+     * NOTE: Real URL fetching is not yet implemented — this is intentionally
+     * a stub pending the planned centralized Knowledge Store rewrite (v1.2+),
+     * so it's not worth building real fetching logic that would be replaced
+     * shortly after. See registerKnowledgeBaseCommands() for the user-facing
+     * "coming soon" message shown when this command is invoked.
      */
     async addFromUrl(url: string, category: string): Promise<void> {
-        try {
-            const content = await this.fetchContent(url);
-            const item: KnowledgeItem = {
-                id: this.generateId(),
-                title: this.extractTitle(url),
-                category,
-                content,
-                tags: this.extractTags(content),
-                source: url,
-                addedDate: new Date().toISOString()
-            };
-
-            this.knowledgeItems.set(item.id, item);
-            await this.saveToDb();
-
-            console.log(`[KnowledgeBase] Added: ${item.title} from ${url}`);
-        } catch (error) {
-            console.error(`[KnowledgeBase] Failed to add from ${url}:`, error);
-        }
+        throw new Error('URL import is not yet implemented — coming in a future update.');
     }
 
     /**
