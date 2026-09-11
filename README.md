@@ -1,25 +1,35 @@
 # 🚀 Dart AI Assistant
 
-AI-powered Dart/Flutter development assistant with real-time learning, code prediction, and intelligent error detection.
+**AI-powered Dart/Flutter development assistant that learns your coding patterns, predicts your next code, and detects errors in real time.**
+
 
 ![Version](https://img.shields.io/badge/version-1.0.10-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Marketplace](https://img.shields.io/badge/marketplace-live-brightgreen)
 
 ---
-
 ## ✨ Features
 
-- 🧠 **Advanced Learning Engine** – Learns your coding patterns and naming conventions
-- 📚 **Import Project for Learning** – Instantly train the extension on an existing project instead of waiting weeks
-- 🏹 **Code Prediction** – Predicts your next lines of code based on your style
-- 🛠 **Smart Error Detection** – Real Dart compiler diagnostics on save, plus live regex-based feedback while typing
-- 🎨 **Auto Code Formatting** – Keeps your Dart code clean and consistent
-- 🔒 **Security Scanning** – Detects common vulnerabilities
-- 📊 **Code Health Reports** – Clickable, auto-refreshing error/warning reports that jump straight to the line
-- 📈 **Learning Dashboard** – Visual insights into your coding style and progress
-- 📖 **Knowledge Base** – Import docs, tutorials, and notes for context-aware suggestions
-- ✅ **100+ Snippets** – Flutter and Dart code snippets built-in, including Uganda-specific Mobile Money patterns
+* 🧠 **Advanced Learning Engine** – Learns your coding patterns, preferences, and naming conventions
+
+* 📚 **Import Project for Learning** – Instantly learn from an existing project instead of waiting for patterns to develop through normal usage
+
+* 🏹 **Code Prediction** – Predicts your next lines of code using your learned patterns and coding style
+
+* 🛠 **Smart Error Detection** – Real `dart analyze` diagnostics on save, plus live regex-based feedback while you type
+
+* 🎨 **Auto Code Formatting** – Keeps your Dart code clean and consistently formatted
+
+* 🔒 **Security Scanning** – Detects common security vulnerabilities and risky coding patterns
+
+* 📊 **Code Health Reports** – Clickable, auto-refreshing reports that take you directly to the affected line
+
+* 📈 **Learning Dashboard** – See what Dart AI has learned and explore patterns across your code
+
+* 📖 **Knowledge Base** – Import documentation, tutorials, and notes to provide additional context for suggestions
+
+* ✅ **100+ Dart & Flutter Snippets** – Built-in snippets for common development tasks, including Uganda-specific Mobile Money patterns
+
 
 ---
 

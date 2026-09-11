@@ -166,9 +166,21 @@ class RefactoringExample {
   void setName(String name) {
     _name = name;
   }
+try {} catch (e, stack) {
+  debugPrint('Error: \n');
+
+}
 
   String getName() {
     return _name;
+  }
+  Row(
+    mainAxisAlignment: MainAxisAlignment.,
+    children: [],
+  )
+  try {} catch (e, stack) {
+    debugPrint('Error: \n');
+
   }
 
   // AI will suggest:

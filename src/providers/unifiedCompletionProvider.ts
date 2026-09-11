@@ -84,15 +84,36 @@ export class UnifiedCompletionProvider implements vscode.CompletionItemProvider 
         }
     }
 
-    /** Keeps the first (highest-priority) occurrence when multiple sources suggest the same label. */
+    /**
+ * Keeps the first (highest-priority) occurrence when multiple sources
+ * suggest effectively the same thing. Compares NORMALIZED insert text
+ * (not just the display label), since different sources often label
+ * the same underlying suggestion differently — e.g. a bare "try"
+ * keyword and a full try/catch snippet both starting with "try" are
+ * different enough to keep, but two near-identical try/catch snippet
+ * bodies from different sources should collapse to one.
+ */
     private _deduplicateByLabel(items: vscode.CompletionItem[]): vscode.CompletionItem[] {
         const seen = new Map<string, vscode.CompletionItem>();
         for (const item of items) {
-            const label = typeof item.label === 'string' ? item.label : item.label.label;
-            if (!seen.has(label)) {
-                seen.set(label, item);
+            const key = this._normalizedInsertKey(item);
+            if (!seen.has(key)) {
+                seen.set(key, item);
             }
         }
         return Array.from(seen.values());
+    }
+
+    /** Builds a normalized comparison key from an item's actual insert content, not just its label. */
+    private _normalizedInsertKey(item: vscode.CompletionItem): string {
+        const raw = item.insertText instanceof vscode.SnippetString
+            ? item.insertText.value
+            : (item.insertText ?? (typeof item.label === 'string' ? item.label : item.label.label));
+
+        return raw
+            .toLowerCase()
+            .replace(/\$\{?\d+:?[^}$]*\}?/g, '') // strip snippet tab-stop placeholders (${1:...}, $1)
+            .replace(/\s+/g, ' ')                 // collapse whitespace
+            .trim();
     }
 }
