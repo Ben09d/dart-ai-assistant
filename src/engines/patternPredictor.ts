@@ -337,11 +337,9 @@ class WidgetBestPracticeAnalyser implements CodeAnalyser {
     analyse(lines: string[], joined: string): CodeRecommendation[] {
         const recs: CodeRecommendation[] = [];
 
-        // build() method with side effects
-        if (
-            /Widget\s+build\s*\(/.test(joined) &&
-            (/print\s*\(/.test(joined) || /debugPrint\s*\(/.test(joined))
-        ) {
+        // build() method with side effects — scoped to the actual build()
+        // method body (brace-bounded), not "anywhere in the file"
+        if (this._hasSideEffectInBuildMethod(lines)) {
             recs.push({
                 id: 'widget-build-side-effects',
                 type: 'widgetBestPractice',
@@ -415,6 +413,34 @@ class WidgetBestPracticeAnalyser implements CodeAnalyser {
         }
         return max;
     }
+
+    /** Checks specifically inside the build() method body for print/debugPrint calls. */
+    private _hasSideEffectInBuildMethod(lines: string[]): boolean {
+        let inBuild = false;
+        let depth = 0;
+
+        for (const line of lines) {
+            if (/Widget\s+build\s*\(/.test(line)) {
+                inBuild = true;
+                depth = 0;
+            }
+
+            if (inBuild) {
+                depth += (line.match(/\{/g) || []).length;
+                depth -= (line.match(/\}/g) || []).length;
+
+                if (/\b(?:print|debugPrint)\s*\(/.test(line)) {
+                    return true;
+                }
+
+                if (depth <= 0 && line.includes('}')) {
+                    inBuild = false;
+                }
+            }
+        }
+
+        return false;
+    }
 }
 
 class StyleAnalyser implements CodeAnalyser {
@@ -444,8 +470,8 @@ class StyleAnalyser implements CodeAnalyser {
             });
         }
 
-        // try without catch
-        if (/\btry\s*\{/.test(joined) && !/\bcatch\s*\(/.test(joined)) {
+        // try without catch or finally — brace-aware, per try-block
+        if (this._hasUnhandledTryBlock(lines)) {
             recs.push({
                 id: 'style-try-no-catch',
                 type: 'style',
@@ -488,14 +514,47 @@ class StyleAnalyser implements CodeAnalyser {
 
         return recs;
     }
+
+    /**
+     * Checks each `try {` block individually (brace-bounded) for a matching
+     * catch or finally — rather than checking "does the whole file have
+     * ANY try and ANY catch," which could miss a genuinely unhandled try
+     * block if a different, unrelated try/catch pair exists elsewhere.
+     */
+    private _hasUnhandledTryBlock(lines: string[]): boolean {
+        for (let startLine = 0; startLine < lines.length; startLine++) {
+            if (!/\btry\s*\{/.test(lines[startLine])) continue;
+
+            let depth = 0;
+            let sawOpenBrace = false;
+            let hasHandler = false;
+
+            for (let i = startLine; i < lines.length; i++) {
+                for (const ch of lines[i]) {
+                    if (ch === '{') { depth++; sawOpenBrace = true; }
+                    if (ch === '}') depth--;
+                }
+
+                if (sawOpenBrace && depth <= 0) {
+                    // Block closed — check if the closing line (or shortly after) has catch/finally
+                    const remainder = lines[i] + (lines[i + 1] ?? '');
+                    hasHandler = /\bcatch\s*\(|\bfinally\s*\{/.test(remainder);
+                    break;
+                }
+            }
+
+            if (!hasHandler) return true;
+        }
+        return false;
+    }
 }
+
 
 class SecurityAnalyser implements CodeAnalyser {
     readonly id = 'security';
 
-    analyse(_lines: string[], joined: string): CodeRecommendation[] {
+    analyse(lines: string[], joined: string): CodeRecommendation[] {
         const recs: CodeRecommendation[] = [];
-
         // Hardcoded secrets heuristic
         if (/(?:apiKey|api_key|secret|password|token)\s*=\s*['"`][A-Za-z0-9+/=_\-]{8,}/i.test(joined)) {
             recs.push({
@@ -521,10 +580,7 @@ class SecurityAnalyser implements CodeAnalyser {
                 suggestion: 'Validate and sanitise all user input before constructing URLs. Use a whitelist of allowed hosts.',
                 tags: ['security', 'network'],
             });
-        }
-
-        // SharedPreferences for sensitive data
-        if (/SharedPreferences/.test(joined) && /(?:token|password|secret)/i.test(joined)) {
+        } if (this._hasSharedPrefsNearSensitiveTerm(lines)) {
             recs.push({
                 id: 'sec-sharedprefs-sensitive',
                 type: 'security',
@@ -536,8 +592,30 @@ class SecurityAnalyser implements CodeAnalyser {
                 tags: ['security', 'storage'],
             });
         }
-
         return recs;
+    }
+
+    /**
+     * Checks whether "SharedPreferences" and a sensitive term (token/
+     * password/secret) appear within 2 lines of each other, rather than
+     * "anywhere in the file" — reduces false positives from unrelated
+     * SharedPreferences usage or unrelated mentions of sensitive terms
+     * (e.g. a comment about an upcoming login screen).
+     */
+    private _hasSharedPrefsNearSensitiveTerm(lines: string[]): boolean {
+        const sensitivePattern = /(?:token|password|secret)/i;
+        const sharedPrefsPattern = /SharedPreferences/;
+
+        for (let i = 0; i < lines.length; i++) {
+            if (!sharedPrefsPattern.test(lines[i])) continue;
+
+            const windowStart = Math.max(0, i - 2);
+            const windowEnd = Math.min(lines.length - 1, i + 2);
+            for (let j = windowStart; j <= windowEnd; j++) {
+                if (sensitivePattern.test(lines[j])) return true;
+            }
+        }
+        return false;
     }
 }
 class StateManagementAnalyser implements CodeAnalyser {
