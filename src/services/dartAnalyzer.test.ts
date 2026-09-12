@@ -59,7 +59,6 @@ describe('DartAnalyzer.isMissingReturn (private, tested via analyzeDocument)', (
         ];
         expect(isMissingReturn(lines[0], 0, lines)).toBe(true);
     });
-
     test('does NOT flag a void function even with no return statement', () => {
         const lines = [
             'void doSomething() {',
@@ -67,5 +66,51 @@ describe('DartAnalyzer.isMissingReturn (private, tested via analyzeDocument)', (
             '}',
         ];
         expect(isMissingReturn(lines[0], 0, lines)).toBe(false);
+    });
+});
+
+describe('DartAnalyzer.isMissingSemicolon', () => {
+    let analyzer: any;
+
+    beforeEach(() => {
+        analyzer = new DartAnalyzer();
+    });
+
+    function isMissingSemicolon(line: string, index: number, lines: string[]): boolean {
+        return (analyzer as any).isMissingSemicolon(line, index, lines);
+    }
+
+    test('does NOT flag a line ending in || (multi-line boolean expression)', () => {
+        const lines = [
+            'this == IncomeCategory.milk ||',
+            'this == IncomeCategory.eggs;',
+        ];
+        expect(isMissingSemicolon(lines[0], 0, lines)).toBe(false);
+    });
+
+    test('does NOT flag a line ending in && (multi-line boolean expression)', () => {
+        const lines = [
+            'isValid &&',
+            'isReady;',
+        ];
+        expect(isMissingSemicolon(lines[0], 0, lines)).toBe(false);
+    });
+
+    test('DOES flag a genuinely missing semicolon on a simple assignment', () => {
+        const lines = [
+            'var x = 5',
+            'print(x);',
+        ];
+        expect(isMissingSemicolon(lines[0], 0, lines)).toBe(true);
+    });
+
+    test('does NOT flag a line ending in an opening brace', () => {
+        const lines = ['void main() {', '}'];
+        expect(isMissingSemicolon(lines[0], 0, lines)).toBe(false);
+    });
+
+    test('does NOT flag comments', () => {
+        const lines = ['// var x = 5', ''];
+        expect(isMissingSemicolon(lines[0], 0, lines)).toBe(false);
     });
 });
