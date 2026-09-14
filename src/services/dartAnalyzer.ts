@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
 
 export type DiagnosticSeverity = 'error' | 'warning' | 'info' | 'hint';
 
@@ -709,17 +710,18 @@ export class DartAnalyzer {
 
     // ── Private ────────────────────────────────────────────────────────────────
 
-    /**
-         * Run the REAL `dart analyze` compiler on a saved document.
-         * Uses caching + in-flight de-duplication so rapid saves don't spawn
-         * redundant processes. This is the authoritative, save-time-only path.
-         */
     async analyzeWithRealAnalyzer(document: vscode.TextDocument, bypassCache = false): Promise<AnalysisResult> {
         const uri = document.uri.toString();
         if (!bypassCache) {
             const cached = this.cache.get(uri, this.options.cacheMaxAgeMs);
             if (cached) return cached;
         }
+
+        if (!this._hasNearbyPubspec(document.fileName)) {
+            this._warnMissingPubspecOnce(document.fileName);
+            return this._makeResult(uri, [], 0, false);
+        }
+
         return this._runOrJoin(uri, document.fileName);
     }
 
@@ -855,6 +857,30 @@ export class DartAnalyzer {
         fromCache: boolean
     ): AnalysisResult {
         return { uri, errors, analyzedAt: Date.now(), durationMs, fromCache };
+    }
+
+    private readonly _warnedPaths = new Set<string>();
+
+    /** Checks if any ancestor directory of the file contains a pubspec.yaml. */
+    private _hasNearbyPubspec(filePath: string): boolean {
+        let dir = path.dirname(filePath);
+        const root = path.parse(dir).root;
+
+        while (dir !== root) {
+            if (fs.existsSync(path.join(dir, 'pubspec.yaml'))) return true;
+            dir = path.dirname(dir);
+        }
+        return fs.existsSync(path.join(root, 'pubspec.yaml'));
+    }
+
+    /** Shows a one-time-per-file warning explaining why syntax checking is unavailable. */
+    private _warnMissingPubspecOnce(filePath: string): void {
+        if (this._warnedPaths.has(filePath)) return;
+        this._warnedPaths.add(filePath);
+
+        vscode.window.showWarningMessage(
+            `Dart AI: No pubspec.yaml found near "${path.basename(filePath)}" — real syntax checking (dart analyze) is unavailable outside a Dart/Flutter project. Live pattern-based feedback still works.`
+        );
     }
 
     /** Resolve the Dart SDK binary path, respecting dart.sdkPath setting. */

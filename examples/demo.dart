@@ -169,11 +169,8 @@ class RefactoringExample {
 try {} catch (e, stack) {
   debugPrint('Error: \n');
 
-}
-sl
-slw
-sf
-slw
+
+
 
   String getName() {
     return _name;

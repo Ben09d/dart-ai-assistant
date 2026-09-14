@@ -618,6 +618,7 @@ class SecurityAnalyser implements CodeAnalyser {
         return false;
     }
 }
+
 class StateManagementAnalyser implements CodeAnalyser {
     readonly id = 'stateManagement';
 
