@@ -179,22 +179,95 @@ export class KnowledgeStore {
     private load(): void {
         try {
             const raw = this.context.globalState.get<Record<string, any>>('knowledgeStore');
-            if (!raw) return;
-            this.entries = new Map(
-                Object.entries(raw).map(([key, v]) => [
-                    key,
-                    {
-                        ...v,
-                        tags: new Set<string>(v.tags ?? []),
-                        fileTypes: new Set<string>(v.fileTypes ?? []),
-                        sources: new Set<string>(v.sources ?? []),
-                        firstSeen: new Date(v.firstSeen),
-                        lastUsed: new Date(v.lastUsed),
-                    } as KnowledgeEntry,
-                ])
-            );
+            if (raw) {
+                this.entries = new Map(
+                    Object.entries(raw).map(([key, v]) => [
+                        key,
+                        {
+                            ...v,
+                            tags: new Set<string>(v.tags ?? []),
+                            fileTypes: new Set<string>(v.fileTypes ?? []),
+                            sources: new Set<string>(v.sources ?? []),
+                            firstSeen: new Date(v.firstSeen),
+                            lastUsed: new Date(v.lastUsed),
+                        } as KnowledgeEntry,
+                    ])
+                );
+                return; // already migrated in a previous session
+            }
+
+            this._migrateFromLegacyStores();
         } catch (error) {
             console.warn('[KnowledgeStore] Failed to load, starting fresh:', error);
         }
+    }
+
+    /**
+     * One-time migration: reads the old scattered storage keys
+     * ('codingPatterns' from LearningEngine, 'advancedLearning' from
+     * AdvancedLearningEngine) directly from globalState and folds them into
+     * this unified store, so existing users don't lose their learned data
+     * when this update lands. Runs only once — after this, 'knowledgeStore'
+     * exists and load() returns early above on future activations.
+     */
+    private _migrateFromLegacyStores(): void {
+        let migratedCount = 0;
+
+        try {
+            const legacyPatterns = this.context.globalState.get<Record<string, any>>('codingPatterns');
+            if (legacyPatterns) {
+                for (const [key, v] of Object.entries(legacyPatterns)) {
+                    if (!v?.pattern) continue;
+                    this.entries.set(`migrated:${key}`, {
+                        key: `migrated:${key}`,
+                        text: v.pattern,
+                        type: 'pattern',
+                        frequency: v.frequency ?? 1,
+                        confidence: Math.min(100, 40 + (v.frequency ?? 1) * 5),
+                        tags: new Set<string>(v.tags ?? []),
+                        fileTypes: new Set<string>(v.fileTypes ?? ['dart']),
+                        firstSeen: v.lastUsed ? new Date(v.lastUsed) : new Date(),
+                        lastUsed: v.lastUsed ? new Date(v.lastUsed) : new Date(),
+                        userConfirmed: v.userConfirmed ?? false,
+                        sources: new Set(['legacy-learningEngine']),
+                    });
+                    migratedCount++;
+                }
+            }
+        } catch (error) {
+            console.warn('[KnowledgeStore] Migration from LearningEngine data failed:', error);
+        }
+
+        try {
+            const legacyAdvanced = this.context.globalState.get<any>('advancedLearning');
+            if (legacyAdvanced?.patterns) {
+                for (const [key, v] of Object.entries<any>(legacyAdvanced.patterns)) {
+                    const uniqueKey = `migrated-adv:${key}`;
+                    if (this.entries.has(uniqueKey)) continue;
+                    this.entries.set(uniqueKey, {
+                        key: uniqueKey,
+                        text: v.pattern ?? key,
+                        type: 'pattern',
+                        frequency: v.frequency ?? 1,
+                        confidence: v.confidence ?? 40,
+                        tags: new Set<string>(),
+                        fileTypes: new Set<string>(['dart']),
+                        firstSeen: v.firstSeen ? new Date(v.firstSeen) : new Date(),
+                        lastUsed: v.lastUsed ? new Date(v.lastUsed) : new Date(),
+                        userConfirmed: false,
+                        sources: new Set(['legacy-advancedLearningEngine']),
+                    });
+                    migratedCount++;
+                }
+            }
+        } catch (error) {
+            console.warn('[KnowledgeStore] Migration from AdvancedLearningEngine data failed:', error);
+        }
+
+        if (migratedCount > 0) {
+            console.log(`[KnowledgeStore] Migrated ${migratedCount} entries from legacy storage.`);
+        }
+
+        this._scheduleSave();
     }
 }
