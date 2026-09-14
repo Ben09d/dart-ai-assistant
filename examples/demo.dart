@@ -169,9 +169,6 @@ class RefactoringExample {
 try {} catch (e, stack) {
   debugPrint('Error: \n');
 
-
-
-
   String getName() {
     return _name;
   }

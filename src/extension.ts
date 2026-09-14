@@ -61,7 +61,9 @@ import { AdvancedLearningEngine } from './services/advancedLearningEngine';
 import { LearningNotifications } from './services/learningNotifications';
 import { CodePredictionEngine } from './services/codePredictionEngine';
 import { PredictiveCompletionProvider, PredictiveInlineProvider, PredictionStatusBar } from './providers/predictiveCompletionProvider';
-import { UnifiedCompletionProvider } from './providers/unifiedCompletionProvider'; import { ErrorPrevention } from './engines/errorPrevention';
+import { UnifiedCompletionProvider } from './providers/unifiedCompletionProvider';
+import { KnowledgeStore } from './services/knowledgeStore';
+import { ErrorPrevention } from './engines/errorPrevention';
 import { AdvancedCompletionEngine } from './providers/advancedCompletionEngine';
 import { AdvancedCompletionAdapter } from './providers/advancedCompletionAdapter';
 import { PatternPredictor } from './engines/patternPredictor';
@@ -97,7 +99,8 @@ let advancedCompletionEngine: AdvancedCompletionEngine | undefined;
 let patternPredictor: PatternPredictor | undefined; let healthStatusBar: vscode.StatusBarItem | undefined;
 let activeAIController: AbortController | undefined;
 let projectImporter: ProjectImporter | undefined;
-let knowledgeBaseManager: KnowledgeBaseManager | undefined;;
+let knowledgeBaseManager: KnowledgeBaseManager | undefined;
+let knowledgeStore: KnowledgeStore | undefined;
 let hoverProvider: HoverProvider | undefined;
 let knowledgeBase: KnowledgeBaseManager | undefined;
 
@@ -278,6 +281,14 @@ function getErrorPrevention(): ErrorPrevention {
     return errorPrevention!;
 }
 
+function getKnowledgeStore(context: vscode.ExtensionContext): KnowledgeStore {
+    if (!knowledgeStore) {
+        knowledgeStore = new KnowledgeStore(context);
+        console.log('✅ Knowledge Store initialized');
+    }
+    return knowledgeStore;
+}
+
 function getKnowledgeBaseManager(context: vscode.ExtensionContext): KnowledgeBaseManager {
     if (!knowledgeBaseManager) {
         const dbPath = path.join(context.globalStorageUri.fsPath, 'knowledge-base.json');
@@ -324,6 +335,7 @@ export async function activate(context: vscode.ExtensionContext) {
             getCodePredictionEngine(context);
             getErrorPrevention();
             getPatternPredictor(context);
+            getKnowledgeStore(context);
             getKnowledgeBase(context);
             vscode.window.showInformationMessage('Dart AI Assistant: All services initialized successfully');
         } catch (error) {

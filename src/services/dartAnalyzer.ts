@@ -292,6 +292,11 @@ export class DartAnalyzer {
             trimmed.endsWith(')') ||    // ← ADD: Skip closing parens
             trimmed.endsWith('=') ||
             trimmed.endsWith('&&') ||
+            trimmed.endsWith('==') ||
+            trimmed.endsWith('!=') ||
+            trimmed.endsWith('<=') ||
+            trimmed.endsWith('>=') ||
+            trimmed.endsWith('\'') ||
             trimmed.endsWith('||') ||
             trimmed.startsWith('static') ||
             trimmed.startsWith('if ') ||   // ← ADD: Skip if/for/while
@@ -341,7 +346,7 @@ export class DartAnalyzer {
             trimmedLine.startsWith(',') ||
             trimmedLine.startsWith(')') ||
             trimmedLine.startsWith('_') ||
-            trimmedLine.startsWith('') ||
+            trimmedLine.startsWith('\'') ||
             trimmedLine.startsWith('late') ||
             trimmedLine.startsWith('final') ||
             trimmedLine.startsWith('static') ||

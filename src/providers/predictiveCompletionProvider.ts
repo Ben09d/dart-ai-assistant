@@ -199,8 +199,10 @@ export class PredictionStatusBar {
     updateStatus() {
         try {
             const stats = this.predictionEngine.getStatistics();
-            this.statusBar.text = `🏹 Predictions: ${stats.totalSequences}`;
-            this.statusBar.tooltip = `Code Predictions\nSequences: ${stats.totalSequences}\nFunction Patterns: ${stats.totalFunctionPatterns}\nBlock Patterns: ${stats.totalBlockPatterns}`;
+            const totalPatterns = stats.totalSequences + stats.totalFunctionPatterns + stats.totalBlockPatterns;
+
+            this.statusBar.text = `📚 Learning Dashboard: ${totalPatterns}`;
+            this.statusBar.tooltip = `Learning Dashboard\nSequences: ${stats.totalSequences}\nFunction Patterns: ${stats.totalFunctionPatterns}\nBlock Patterns: ${stats.totalBlockPatterns}\nMemory: ${stats.memoryEstimate}`;
             this.statusBar.show();
         } catch (error) {
             try {
