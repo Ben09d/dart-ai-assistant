@@ -1541,6 +1541,19 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
         );
 
         // ======================================================================
+        // KNOWLEDGE STORE STATS — debug/verify the unified store
+        // ======================================================================
+        context.subscriptions.push(
+            vscode.commands.registerCommand('dartAI.knowledgeStoreStats', () => {
+                const store = getKnowledgeStore(context);
+                const stats = store.getStats();
+                vscode.window.showInformationMessage(
+                    `📚 Knowledge Store: ${stats.totalEntries} entries | By type: ${JSON.stringify(stats.byType)}`
+                );
+            })
+        );
+
+        // ======================================================================
         // SEARCH PATTERNS — debug/verify what's actually been learned
         // ======================================================================
         context.subscriptions.push(

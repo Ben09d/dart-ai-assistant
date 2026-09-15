@@ -86,6 +86,10 @@
         "title": "Dart AI: Forget Pattern"
       },
       {
+        "command": "dartAI.knowledgeStoreStats",
+        "title": "Dart AI: Knowledge Store Stats (debug)"
+      },
+      {
         "command": "dartAI.searchPatterns",
         "title": "Dart AI: Search Patterns (debug)"
       },
