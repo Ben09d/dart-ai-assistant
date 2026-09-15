@@ -1682,8 +1682,38 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
 
 }
 
+/**
+ * Feeds simple, high-signal patterns from a saved document directly into
+ * KnowledgeStore. This runs ALONGSIDE the legacy LearningEngine/
+ * AdvancedLearningEngine analysis (not replacing it yet) — the goal is for
+ * KnowledgeStore to independently grow from real usage, so once completion
+ * providers cut over to reading from it, there's genuinely fresh data,
+ * not just the one-time migration snapshot.
+ */
+function _feedKnowledgeStoreFromDocument(document: vscode.TextDocument, context: vscode.ExtensionContext): void {
+    try {
+        const store = getKnowledgeStore(context);
+        const lines = document.getText().split('\n');
+        const fileType = document.fileName.split('.').pop() ?? 'dart';
 
+        for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith('//')) continue;
 
+            if (
+                line.includes('class ') ||
+                line.includes('Future<') ||
+                line.includes('try {') ||
+                line.includes('catch (') ||
+                line.includes('setState(')
+            ) {
+                store.record(`ks:${line}`, line, 'pattern', 'live-save', { fileType });
+            }
+        }
+    } catch (error) {
+        console.warn('[KnowledgeStore] Error feeding from document:', error);
+    }
+}
 
 /**
  * Runs the lightweight regex-based analysers (errorPrevention,
@@ -1888,9 +1918,14 @@ function setupLearningWatchers(context: vscode.ExtensionContext) {
             vscode.workspace.onDidSaveTextDocument(async (document) => {
                 try {
                     if (document.languageId !== 'dart') return;
-
                     // Basic engine (rich pattern detection: classes, async, state mgmt, widgets)
                     await getLearningEngine(context).analyzeDocument(document);
+
+                    // Also feed the unified KnowledgeStore directly from the same document,
+                    // so new patterns going forward land in one place instead of scattering
+                    // across the legacy engines further.
+                    _feedKnowledgeStoreFromDocument(document, context);
+
 
                     // ADVANCED: Analyze with advanced engine
                     const advEngine = getAdvancedLearningEngine(context);
