@@ -470,7 +470,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Show prediction stats in status bar
         try {
-            const statusBar = new PredictionStatusBar(predictionEngine);
+            const statusBar = new PredictionStatusBar(getCodePredictionEngine(context), getLearningEngine(context));
             context.subscriptions.push(statusBar);
         } catch (error) {
             console.warn('Error creating prediction status bar:', error);

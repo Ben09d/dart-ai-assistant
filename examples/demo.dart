@@ -328,14 +328,18 @@ class MyServiceClass {
   String userName = '';
   int userAge = 0;
   bool isActive = true;
+try
+try
 
   void printInfo() {
     print('User: $userName, Age: $userAge, Active: $isActive');
   }
+
 }
 
 // If you prefer factory constructors:
 class User {
+try
   final String name;
   final int age;
   final bool isActive;

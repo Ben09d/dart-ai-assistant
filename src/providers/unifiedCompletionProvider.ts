@@ -35,6 +35,8 @@ export class UnifiedCompletionProvider implements vscode.CompletionItemProvider 
         token: vscode.CancellationToken,
         context: vscode.CompletionContext
     ): Promise<vscode.CompletionItem[]> {
+        if (token.isCancellationRequested) return [];
+
         const results = await Promise.allSettled([
             this._safeCallSync(() => this._knowledgeStoreCompletions(document, position)),
             this._safeCall(() => this.predictiveProvider.provideCompletionItems(document, position, token, context)),
@@ -42,6 +44,8 @@ export class UnifiedCompletionProvider implements vscode.CompletionItemProvider 
             this._safeCall(() => this.completionProvider.provideCompletionItems(document, position, token, context)),
             this._safeCallSync(() => this.snippetProvider.provideCompletionItems(document, position)),
         ]);
+
+        if (token.isCancellationRequested) return [];
 
         const merged: vscode.CompletionItem[] = [];
         results.forEach((result, sourceIndex) => {

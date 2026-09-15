@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { CodePredictionEngine } from '../services/codePredictionEngine';
+import { LearningDashboard } from '../services/learningDashboard';
+import { LearningEngine } from '../services/learningEngine';
 
 export class PredictiveCompletionProvider implements vscode.CompletionItemProvider {
     private predictionEngine: CodePredictionEngine;
@@ -184,12 +186,14 @@ export class PredictiveInlineProvider {
  */
 export class PredictionStatusBar {
     private statusBar: vscode.StatusBarItem;
-    private predictionEngine: CodePredictionEngine;
+    // private predictionEngine: CodePredictionEngine;
+    private learningEngine: LearningEngine; // Placeholder for LearningEngine type
 
-    constructor(predictionEngine: CodePredictionEngine) {
-        this.predictionEngine = predictionEngine;
+    constructor(predictionEngine: CodePredictionEngine, learningEngine: LearningEngine) {
+        // this.predictionEngine = predictionEngine;
+        this.learningEngine = learningEngine;
         this.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-        this.statusBar.command = 'dartAI.showPredictionStats';
+        this.statusBar.command = 'dartAI.viewLearningDashboard';
         this.updateStatus();
     }
 
@@ -198,11 +202,12 @@ export class PredictionStatusBar {
      */
     updateStatus() {
         try {
-            const stats = this.predictionEngine.getStatistics();
-            const totalPatterns = stats.totalSequences + stats.totalFunctionPatterns + stats.totalBlockPatterns;
+            const stats = this.learningEngine.getStatistics();
+            // const stat = this.predictionEngine.getStatistics();
+            const totalPatterns = stats.totalPatterns;
 
-            this.statusBar.text = `📚 Learning Dashboard: ${totalPatterns}`;
-            this.statusBar.tooltip = `Learning Dashboard\nSequences: ${stats.totalSequences}\nFunction Patterns: ${stats.totalFunctionPatterns}\nBlock Patterns: ${stats.totalBlockPatterns}\nMemory: ${stats.memoryEstimate}`;
+            this.statusBar.text = `🔵 Dashboard: ${totalPatterns}`;
+            this.statusBar.tooltip = `Learning Dashboard\nFunction Patterns: ${stats.preferredNaming}\nBlock Patterns: ${stats.preferredStructure}\nMemory: ${stats.totalFixes} fixes learned`;
             this.statusBar.show();
         } catch (error) {
             try {
