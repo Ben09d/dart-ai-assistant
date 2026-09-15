@@ -454,6 +454,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const predictiveProvider = new PredictiveCompletionProvider(predictionEngine);
 
         const unifiedProvider = new UnifiedCompletionProvider(
+            getKnowledgeStore(context),
             predictiveProvider,
             advAdapter,
             completionProvider,

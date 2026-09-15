@@ -3,6 +3,7 @@ import { CompletionProvider } from './completionProvider';
 import { SnippetProvider } from './snippetProvider';
 import { AdvancedCompletionAdapter } from './advancedCompletionAdapter';
 import { PredictiveCompletionProvider } from './predictiveCompletionProvider';
+import { KnowledgeStore } from '../services/knowledgeStore';
 
 /**
  * Single entry point for all Dart completion sources. Internally queries
@@ -18,9 +19,10 @@ import { PredictiveCompletionProvider } from './predictiveCompletionProvider';
  * 4. Snippets (lowest priority — broadest, most generic matches)
  */
 export class UnifiedCompletionProvider implements vscode.CompletionItemProvider {
-    private readonly sourceNames = ['predictive', 'advanced', 'basic', 'snippet'];
+    private readonly sourceNames = ['knowledgeStore', 'predictive', 'advanced', 'basic', 'snippet'];
 
     constructor(
+        private readonly knowledgeStore: KnowledgeStore,
         private readonly predictiveProvider: PredictiveCompletionProvider,
         private readonly advancedAdapter: AdvancedCompletionAdapter,
         private readonly completionProvider: CompletionProvider,
@@ -34,6 +36,7 @@ export class UnifiedCompletionProvider implements vscode.CompletionItemProvider 
         context: vscode.CompletionContext
     ): Promise<vscode.CompletionItem[]> {
         const results = await Promise.allSettled([
+            this._safeCallSync(() => this._knowledgeStoreCompletions(document, position)),
             this._safeCall(() => this.predictiveProvider.provideCompletionItems(document, position, token, context)),
             this._safeCall(() => this.advancedAdapter.provideCompletionItems(document, position, token, context)),
             this._safeCall(() => this.completionProvider.provideCompletionItems(document, position, token, context)),
@@ -57,6 +60,30 @@ export class UnifiedCompletionProvider implements vscode.CompletionItemProvider 
         }
 
         return deduped;
+    }
+
+    /** Queries KnowledgeStore directly and converts matches into completion items. */
+    private _knowledgeStoreCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
+        const lineText = document.lineAt(position).text;
+        const prefix = lineText.substring(0, position.character).trim();
+        if (prefix.length < 2) return [];
+
+        const fileType = document.fileName.split('.').pop() ?? 'dart';
+        const entries = this.knowledgeStore.query(prefix, fileType, 5);
+
+        return entries.map((entry, index) => {
+            const item = new vscode.CompletionItem(
+                entry.label ?? entry.text,
+                entry.userConfirmed ? vscode.CompletionItemKind.Reference : vscode.CompletionItemKind.Text
+            );
+            item.detail = entry.userConfirmed
+                ? `⭐ Your pattern — ${entry.confidence}% confidence, Dart AI`
+                : `Knowledge Store — ${entry.confidence}% confidence, Dart AI`;
+            item.documentation = `Used ${entry.frequency}× across ${entry.sources.size} source(s).`;
+            item.insertText = entry.text;
+            item.sortText = `00${index}`;
+            return item;
+        });
     }
 
     /** Runs an async provider call without letting one failure kill the whole merged list. */
