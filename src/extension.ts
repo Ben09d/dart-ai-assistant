@@ -1503,6 +1503,10 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
                     return;
                 }
 
+                const trimmed = selectedText.trim();
+                getKnowledgeStore(context).recordExplicit(`ks:${trimmed}`, trimmed, 'pattern', 'dart');
+                // Keep the legacy engine in sync too, so existing completion sources
+                // still reading from it also see this pattern until fully retired.
                 getLearningEngine(context).learnPatternExplicitly(selectedText, 'dart');
                 vscode.window.showInformationMessage('⭐ Pattern learned! It will now be prioritized in suggestions.');
             })
@@ -1513,19 +1517,20 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
         // ======================================================================
         context.subscriptions.push(
             vscode.commands.registerCommand('dartAI.forgetPattern', async () => {
-                const entries = getLearningEngine(context).getAllPatternEntries();
+                const store = getKnowledgeStore(context);
+                const entries = store.getAllEntries();
                 if (entries.length === 0) {
                     vscode.window.showInformationMessage('No patterns learned yet.');
                     return;
                 }
 
                 const items = entries
-                    .sort((a, b) => b[1].frequency - a[1].frequency)
+                    .sort((a, b) => b.frequency - a.frequency)
                     .slice(0, 50) // cap the picker list for usability
-                    .map(([key, pattern]) => ({
-                        label: pattern.userConfirmed ? `⭐ ${pattern.pattern}` : pattern.pattern,
-                        description: `${pattern.frequency}× used`,
-                        key,
+                    .map(entry => ({
+                        label: entry.userConfirmed ? `⭐ ${entry.text}` : entry.text,
+                        description: `${entry.frequency}× used`,
+                        key: entry.key,
                     }));
 
                 const selected = await vscode.window.showQuickPick(items, {
@@ -1534,13 +1539,15 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
 
                 if (!selected) return;
 
-                const removed = getLearningEngine(context).forgetPattern(selected.key);
+                const removed = store.forget(selected.key);
+                // Best-effort: also try removing from the legacy engine, in case
+                // this pattern originated there and hasn't migrated/synced yet.
+                getLearningEngine(context).forgetPattern(selected.key);
                 vscode.window.showInformationMessage(
                     removed ? '🗑️ Pattern forgotten.' : 'Could not remove pattern.'
                 );
             })
         );
-
         // ======================================================================
         // KNOWLEDGE STORE STATS — debug/verify the unified store
         // ======================================================================
