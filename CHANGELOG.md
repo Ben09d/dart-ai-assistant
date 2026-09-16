@@ -2,7 +2,26 @@
 
 All notable changes to the "Dart AI Assistant" extension will be documented in this file.
 
-## [1.0.10] - 2026
+## [1.0.11] - 2026-08-24
+
+The final 1.0.x release — completes the architecture-hardening work started in 1.0.10, adds explicit pattern teaching, lays the foundation for a unified knowledge store, and ships a real automated test suite.
+
+### Added
+- ⭐ **Learn This Pattern** / 🗑️ **Forget a Pattern** — select code and teach the extension explicitly via the lightbulb (Quick Fix) menu or right-click. User-taught patterns are boosted to 100% confidence and prioritized in suggestions over passively-learned ones.
+- 📚 **Unified Knowledge Store (foundation)** — a new single data store (`KnowledgeStore`) that consolidates patterns from the legacy Learning Engine and Advanced Learning Engine into one place, with a one-time migration that preserves all existing users' learned data. Now contributes live to code completions alongside the existing sources, growing from every save. Full retirement of the older scattered stores is planned for a future release.
+- 🧪 **Automated test suite** — Jest + ts-jest infrastructure with 24+ tests covering the highest-risk logic: control-flow detection, semicolon checks, prediction confidence scaling, pattern capping, and brace-aware false-positive prevention. Protects against the exact class of silent regression found throughout this release cycle.
+- ⚠️ **Missing pubspec.yaml warning** — `dart analyze` integration now shows a clear, one-time message explaining why syntax checking is unavailable for files outside a Dart/Flutter project, instead of failing silently.
+
+### Fixed
+- Fixed a regression in the missing-return-statement check where a closing brace before `else if` (`} else if (...)`) was not correctly recognized as a control-flow line, causing false "Missing return statement" errors — a very common pattern in real code.
+- Fixed the missing-semicolon check incorrectly flagging lines ending in `||` (multi-line boolean OR expressions), matching the existing `&&` handling.
+- Hardened three more whole-document regex checks against false positives across unrelated functions: `WidgetBestPracticeAnalyser`'s side-effects-in-build() check (now scoped to the actual build() method body), `StyleAnalyser`'s try/without/catch check (now per-block), and `SecurityAnalyser`'s SharedPreferences-with-sensitive-data check (now proximity-based instead of whole-file).
+- Fixed near-duplicate completion suggestions in the unified completion provider — deduplication now compares normalized insert text (stripping snippet placeholders and whitespace) instead of just the display label, collapsing genuinely identical suggestions from different sources while preserving distinct ones.
+- Added a completion-range fix so accepting a suggestion replaces the text already typed instead of inserting alongside it (was producing duplicated text, e.g. "importimport").
+- The "Add Knowledge from URL" command now shows an honest "coming soon" message instead of silently creating a fake placeholder entry.
+- `UnifiedCompletionProvider` now honours the cancellation token passed by VS Code.
+
+## [1.0.10] - 2026-08-24
 
 The largest release to date — a comprehensive engine-by-engine overhaul covering learning, prediction, completion, error detection, and AI integration, plus two major new features.
 
@@ -116,16 +135,25 @@ The largest release to date — a comprehensive engine-by-engine overhaul coveri
 
 ## Roadmap
 
-### Upcoming Features
+### Free, Local-First (Always)
 - [ ] Support for more Dart frameworks (AngularDart, Aqueduct, etc.)
 - [ ] More advanced refactoring patterns
-- [ ] Collaboration features
 - [ ] Performance profiling
 - [ ] Dependency analysis
 - [ ] Code complexity metrics
 - [ ] Custom rule configuration
-- [ ] Team learning capabilities
-- [ ] Cloud sync for learned patterns
+
+### Individual PRO — Cloud-Synced Coding Profile
+- [ ] Cloud sync for learned patterns across devices
+- [ ] Richer, cross-project analytics dashboard
+
+### Team — Shared Knowledge & Conventions
+- [ ] Team learning capabilities (shared, curated coding rules)
+- [ ] Collaboration features
+
+*Cloud/team features are exploratory — the extension is, and will
+remain, fully usable for free with all local-first features above.
+If you'd use a paid tier, [let us know](https://github.com/Ben09d/dart-ai-assistant/issues) what would make it worth it.*
 
 ### Known Issues
 - None reported yet

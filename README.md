@@ -3,7 +3,7 @@
 **AI-powered Dart/Flutter development assistant that learns your coding patterns, predicts your next code, and detects errors in real time.**
 
 
-![Version](https://img.shields.io/badge/version-1.0.10-blue)
+![Version](https://img.shields.io/badge/version-1.0.11-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Marketplace](https://img.shields.io/badge/marketplace-live-brightgreen)
 
@@ -65,7 +65,7 @@ vsce package
 
 Then install the generated `.vsix` file:
 ```bash
-code --install-extension dart-ai-assistant-1.0.10.vsix
+code --install-extension dart-ai-assistant-1.0.11.vsix
 ```
 
 Or in VS Code: **Extensions → ... → Install from VSIX**

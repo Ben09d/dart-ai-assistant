@@ -1,8 +1,8 @@
 {
   "name": "dart-ai-assistant",
   "displayName": "Dart AI Assistant",
-  "description": "Advanced AI-powered Dart assistant with auto-correction, learning ability, security analysis, and intelligent code suggestions",
-  "version": "1.0.10",
+  "description": "**Advanced AI-powered Dart & Flutter coding assistant with intelligent code suggestions, project-aware learning, automatic code correction, error detection, and security analysis.**",
+  "version": "1.0.11",
   "publisher": "a-i-0-studio",
   "repository": {
     "type": "git",
