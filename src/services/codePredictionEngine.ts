@@ -1,4 +1,5 @@
 import type * as vscode from 'vscode';
+import { KnowledgeStore } from './knowledgeStore';
 
 declare const console: {
     warn(message?: any, ...optionalParams: any[]): void;
@@ -27,6 +28,10 @@ export class CodePredictionEngine {
     private blockPatterns: Map<string, string[]>;
     private maxSequences: number = 300;
     private minConfidence: number = 60;
+    /** Optional — when set, high-confidence sequences also get reported
+     * to the unified KnowledgeStore, so it has visibility into strong
+     * sequence-based patterns without merging the underlying data shapes. */
+    private knowledgeStore?: KnowledgeStore;
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -35,6 +40,11 @@ export class CodePredictionEngine {
         this.functionPatterns = new Map();
         this.blockPatterns = new Map();
         this.loadPredictionData();
+    }
+
+    /** Connects this engine to the shared KnowledgeStore for cross-reporting. */
+    setKnowledgeStore(store: KnowledgeStore): void {
+        this.knowledgeStore = store;
     }
 
     /**
@@ -89,6 +99,19 @@ export class CodePredictionEngine {
             if (existing) {
                 existing.frequency++;
                 existing.confidence = Math.min(100, existing.confidence + 2);
+
+                // Once a sequence crosses the confidence threshold, report it
+                // to KnowledgeStore so it's visible there too, without
+                // forcing sequence data into KnowledgeStore's entry shape.
+                if (existing.confidence >= this.minConfidence && this.knowledgeStore) {
+                    this.knowledgeStore.record(
+                        `ks:seq:${current}->${next}`,
+                        next,
+                        'pattern',
+                        'codePredictionEngine',
+                        { tags: ['sequence-prediction'] }
+                    );
+                }
             } else {
                 sequences.push({
                     current,

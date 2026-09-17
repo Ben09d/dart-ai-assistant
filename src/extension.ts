@@ -255,6 +255,7 @@ function getCodePredictionEngine(context: vscode.ExtensionContext): CodePredicti
     if (!codePredictionEngine) {
         try {
             codePredictionEngine = new CodePredictionEngine(context);
+            codePredictionEngine.setKnowledgeStore(getKnowledgeStore(context));
             console.log('✅ Code Prediction Engine initialized');
         } catch (error) {
             console.error('Failed to initialize code prediction engine:', error);
@@ -262,7 +263,6 @@ function getCodePredictionEngine(context: vscode.ExtensionContext): CodePredicti
     }
     return codePredictionEngine!;
 }
-
 function getAdvancedCompletionEngine(context: vscode.ExtensionContext): AdvancedCompletionEngine {
     if (!advancedCompletionEngine) {
         advancedCompletionEngine = new AdvancedCompletionEngine(
