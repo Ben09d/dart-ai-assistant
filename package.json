@@ -86,6 +86,10 @@
         "title": "Dart AI: Forget Pattern"
       },
       {
+        "command": "dartAI.learnAsTemplate",
+        "title": "Dart AI: Learn as Template (abstract project-specific names)"
+      },
+      {
         "command": "dartAI.knowledgeStoreStats",
         "title": "Dart AI: Knowledge Store Stats (debug)"
       },

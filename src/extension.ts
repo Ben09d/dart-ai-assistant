@@ -1484,7 +1484,50 @@ Use Ctrl+Shift+P → "Show Predictions" to see next line suggestions.
             })
         );
 
+        // ======================================================================
+        // LEARN AS TEMPLATE — abstract project-specific naming, save the
+        // resulting reusable structure to KnowledgeStore
+        // ======================================================================
+        context.subscriptions.push(
+            vscode.commands.registerCommand('dartAI.learnAsTemplate', async () => {
+                const editor = vscode.window.activeTextEditor;
+                if (!editor || editor.document.languageId !== 'dart') {
+                    vscode.window.showErrorMessage('Please open a Dart file');
+                    return;
+                }
 
+                const selectedText = editor.document.getText(editor.selection);
+                if (!selectedText.trim()) {
+                    vscode.window.showErrorMessage('Select some code first, then run this command.');
+                    return;
+                }
+
+                const { abstractTemplate } = require('./services/templateAbstractor');
+                const { template, replacements } = abstractTemplate(selectedText);
+
+                if (replacements.length === 0) {
+                    vscode.window.showInformationMessage('No domain-specific names detected — nothing to abstract. Try "Learn This Pattern" instead.');
+                    return;
+                }
+
+                const preview = await vscode.window.showInformationMessage(
+                    `Detected: ${replacements.map((r: any) => `${r.original}→${r.placeholder}`).join(', ')}. Save this as a reusable template?`,
+                    { modal: true, detail: template },
+                    'Save Template'
+                );
+
+                if (preview !== 'Save Template') return;
+
+                getKnowledgeStore(context).recordExplicit(
+                    `ks:template:${template}`,
+                    template,
+                    'snippet',
+                    'dart'
+                );
+
+                vscode.window.showInformationMessage('📰 Template saved! It will now suggest across all your projects, free of project-specific naming.');
+            })
+        );
 
         // ======================================================================
         // LEARN THIS PATTERN — explicitly teach a selected code snippet

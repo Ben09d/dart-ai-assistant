@@ -84,6 +84,7 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
         if (!range.isEmpty) {
             actions.push(this._buildLearnPatternAction(document, range));
             actions.push(this._buildForgetPatternAction(document, range));
+            actions.push(this._buildLearnAsTemplateAction(document, range));
         }
 
         return actions;
@@ -111,6 +112,19 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
         action.command = {
             title: 'Forget a Pattern',
             command: 'dartAI.forgetPattern',
+        };
+        return action;
+    }
+
+    /** Lightbulb action offering to learn the selected code as a template. */
+    private _buildLearnAsTemplateAction(document: vscode.TextDocument, range: vscode.Range): vscode.CodeAction {
+        const action = new vscode.CodeAction(
+            '📰 Dart AI: Learn as Template',
+            vscode.CodeActionKind.Empty
+        );
+        action.command = {
+            title: 'Learn as Template',
+            command: 'dartAI.learnAsTemplate',
         };
         return action;
     }
